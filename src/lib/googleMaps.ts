@@ -1,4 +1,4 @@
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDQcS4nJG2pH9gW42PjI-5AZBJK-LLS8_8';
 
 let loadPromise: Promise<void> | null = null;
 
