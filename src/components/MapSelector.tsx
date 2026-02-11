@@ -63,6 +63,17 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
         }
       } catch (err) {
         console.error('Geocoding error:', err);
+        // Fallback: set location with coordinates even if geocoding fails
+        onLocationChange({
+          lat,
+          lng,
+          district: 'Unknown',
+          city: '',
+          province: 'Unknown',
+          country: 'Indonesia',
+          countryCode: 'ID',
+          fullAddress: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        });
       }
     },
     [onLocationChange]
