@@ -105,16 +105,15 @@ async function drawOverlay(
   const textContentWidth = infoBoxWidth - padding * 2;
 
   // Watermark badge dimensions
-  const iconSize = Math.round(16 * scale);
   const wmBadgePadH = Math.round(8 * scale);
   const wmBadgePadV = Math.round(5 * scale);
-  const wmGap = Math.round(4 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
   if (proSettings.watermarkText) {
     ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
-    wmBadgeW = iconSize + wmGap + ctx.measureText(proSettings.watermarkText).width + wmBadgePadH * 2;
-    wmBadgeH = Math.max(iconSize, fontSizeWatermark) + wmBadgePadV * 2;
+    const wmText = `📷 ${proSettings.watermarkText}`;
+    wmBadgeW = ctx.measureText(wmText).width + wmBadgePadH * 2;
+    wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
   }
 
   // Measure text height with auto-sizing
@@ -142,35 +141,24 @@ async function drawOverlay(
   roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
   ctx.fill();
 
-  // Watermark badge - small box INSIDE info box at top-right corner
+  // Watermark badge - own small box ABOVE info box at top-right
   if (proSettings.watermarkText && wmBadgeW > 0) {
-    const badgeMargin = Math.round(8 * scale);
-    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW - badgeMargin;
-    const badgeY = infoBoxY + badgeMargin;
-    const badgeRadius = Math.round(5 * scale);
+    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW;
+    const badgeY = infoBoxY - wmBadgeH - Math.round(6 * scale);
+    const badgeRadius = Math.round(6 * scale);
 
     ctx.save();
-    ctx.fillStyle = `rgba(30, 30, 30, 0.7)`;
+    ctx.fillStyle = `rgba(50, 50, 50, 0.75)`;
     roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, badgeRadius);
     ctx.fill();
 
-    // Draw icon
-    try {
-      const iconImg = await loadImage('/images/gps-camera-icon.png');
-      const iconY = badgeY + (wmBadgeH - iconSize) / 2;
-      ctx.drawImage(iconImg, badgeX + wmBadgePadH, iconY, iconSize, iconSize);
-    } catch {
-      // skip icon if failed
-    }
-
-    // Draw text
-    ctx.globalAlpha = 0.95;
+    ctx.globalAlpha = 0.9;
     ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
     ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center';
     ctx.fillText(
-      proSettings.watermarkText,
-      badgeX + wmBadgePadH + iconSize + wmGap,
+      `📷 ${proSettings.watermarkText}`,
+      badgeX + wmBadgeW / 2,
       badgeY + wmBadgePadV + fontSizeWatermark * 0.85
     );
     ctx.restore();
@@ -246,16 +234,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
 }
 
 function loadStaticMap(lat: number, lng: number, size: number, scale: number): Promise<HTMLImageElement> {
