@@ -102,6 +102,18 @@ async function drawOverlay(
   const infoBoxWidth = canvasW - margin * 2 - miniMapSize - gap;
   const textContentWidth = infoBoxWidth - padding * 2;
 
+  // Watermark badge dimensions
+  const wmBadgePadH = Math.round(6 * scale);
+  const wmBadgePadV = Math.round(4 * scale);
+  let wmBadgeW = 0;
+  let wmBadgeH = 0;
+  if (proSettings.watermarkText) {
+    ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
+    const wmText = `📷 ${proSettings.watermarkText}`;
+    wmBadgeW = ctx.measureText(wmText).width + wmBadgePadH * 2;
+    wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
+  }
+
   // Measure text height
   let totalTextHeight = 0;
   const wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
@@ -113,14 +125,9 @@ async function drawOverlay(
     totalTextHeight += wrapped.length * line.fontSize * lineHeight;
   }
 
-  // Add space for watermark
-  const watermarkHeight = proSettings.watermarkText ? fontSizeWatermark + padding * 0.5 : 0;
-
-  const infoBoxContentH = totalTextHeight + watermarkHeight;
+  const infoBoxContentH = totalTextHeight;
   const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH + padding * 2);
 
-  // Position everything at bottom-right
-  const totalHeight = infoBoxHeight;
   const overlayBottom = canvasH - margin;
 
   // Info box (dark background) - right side
@@ -131,6 +138,29 @@ async function drawOverlay(
   ctx.fillStyle = `rgba(0, 0, 0, ${opacity * 0.85})`;
   roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
   ctx.fill();
+
+  // Watermark badge - small box at top-right corner of info box
+  if (proSettings.watermarkText && wmBadgeW > 0) {
+    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW - Math.round(6 * scale);
+    const badgeY = infoBoxY + Math.round(6 * scale);
+    const badgeRadius = Math.round(6 * scale);
+
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, 0.55)`;
+    roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, badgeRadius);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.9;
+    ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      `📷 ${proSettings.watermarkText}`,
+      badgeX + wmBadgeW / 2,
+      badgeY + wmBadgePadV + fontSizeWatermark * 0.85
+    );
+    ctx.restore();
+  }
 
   // Mini map - left side, aligned to bottom of info box
   const mmX = margin;
@@ -144,7 +174,6 @@ async function drawOverlay(
     ctx.drawImage(mapImg, mmX, mmY, miniMapSize, miniMapSize);
     ctx.restore();
   } catch {
-    // Fallback map placeholder
     ctx.save();
     ctx.fillStyle = '#e8e4d8';
     roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
@@ -156,9 +185,10 @@ async function drawOverlay(
     ctx.restore();
   }
 
-  // Draw text inside info box
+  // Draw text inside info box - vertically centered
   const textX = infoBoxX + padding;
-  let textY = infoBoxY + padding + fontSizeTitle * 0.9;
+  const textBlockTop = infoBoxY + (infoBoxHeight - totalTextHeight) / 2;
+  let textY = textBlockTop + wrappedTextData[0]?.fontSize * 0.9;
 
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
@@ -169,24 +199,6 @@ async function drawOverlay(
       ctx.fillText(wLine, textX, textY);
       textY += block.fontSize * lineHeight;
     }
-  }
-
-  // Watermark - top right of info box
-  if (proSettings.watermarkText) {
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.font = `500 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'right';
-
-    // Draw small camera icon placeholder (📷) + text
-    const wmText = `📷 ${proSettings.watermarkText}`;
-    ctx.fillText(
-      wmText,
-      infoBoxX + infoBoxWidth - padding,
-      infoBoxY + padding + fontSizeWatermark * 0.8
-    );
-    ctx.restore();
   }
 }
 
