@@ -2,6 +2,12 @@ import { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
 import { getApiKey } from '@/lib/googleMaps';
 import { formatDateTime } from '@/lib/dateUtils';
 
+/**
+ * Layout: Bottom of image
+ * [Mini Map (no dark bg)] [Dark info box with text + watermark]
+ * Map sits to the left, dark rounded box to the right.
+ */
+
 export async function renderGeoTagImage(
   image: HTMLImageElement,
   location: LocationData,
@@ -13,21 +19,58 @@ export async function renderGeoTagImage(
 
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
-
-  // Draw original image
   ctx.drawImage(image, 0, 0);
 
-  const scale = Math.max(canvas.width / 1200, 1);
-  const overlayMargin = Math.round(20 * scale);
-  const overlayPadding = Math.round(16 * scale);
-  const miniMapSize = Math.round(140 * scale);
-  const gap = Math.round(14 * scale);
+  await drawOverlay(ctx, canvas.width, canvas.height, location, dateTime, proSettings, false);
 
-  // Calculate text metrics for dynamic height
-  const fontSizeTitle = Math.round(18 * scale);
-  const fontSizeBody = Math.round(13 * scale);
-  const fontSizeWatermark = Math.round(11 * scale);
-  const lineHeight = 1.5;
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob!), 'image/png', 1.0);
+  });
+}
+
+export async function renderPreview(
+  canvas: HTMLCanvasElement,
+  image: HTMLImageElement,
+  location: LocationData,
+  dateTime: DateTimeData,
+  proSettings: ProSettings
+): Promise<void> {
+  const ctx = canvas.getContext('2d')!;
+
+  const maxW = canvas.parentElement?.clientWidth || 600;
+  const ratio = image.naturalWidth / image.naturalHeight;
+  const displayW = Math.min(maxW, image.naturalWidth);
+  const displayH = displayW / ratio;
+
+  canvas.width = displayW;
+  canvas.height = displayH;
+  ctx.drawImage(image, 0, 0, displayW, displayH);
+
+  await drawOverlay(ctx, displayW, displayH, location, dateTime, proSettings, true);
+}
+
+async function drawOverlay(
+  ctx: CanvasRenderingContext2D,
+  canvasW: number,
+  canvasH: number,
+  location: LocationData,
+  dateTime: DateTimeData,
+  proSettings: ProSettings,
+  isPreview: boolean
+) {
+  const scale = Math.max(canvasW / 1080, isPreview ? 0.45 : 0.8);
+
+  const margin = Math.round(20 * scale);
+  const padding = Math.round(14 * scale);
+  const miniMapSize = Math.round(160 * scale);
+  const gap = Math.round(8 * scale);
+  const borderRadius = Math.round(14 * scale);
+  const mapBorderRadius = Math.round(10 * scale);
+
+  const fontSizeTitle = Math.round(16 * scale);
+  const fontSizeBody = Math.round(11 * scale);
+  const fontSizeWatermark = Math.round(9 * scale);
+  const lineHeight = 1.45;
 
   // Build text lines
   const flag = getFlagEmoji(location.countryCode);
@@ -55,111 +98,114 @@ export async function renderGeoTagImage(
     bold: false,
   });
 
-  // Measure text area width
-  const maxTextWidth = canvas.width - overlayMargin * 2 - overlayPadding * 2 - miniMapSize - gap - overlayPadding;
+  // Info box width = total width - margins - map - gap
+  const infoBoxWidth = canvasW - margin * 2 - miniMapSize - gap;
+  const textContentWidth = infoBoxWidth - padding * 2;
 
-  // Calculate needed height
+  // Measure text height
   let totalTextHeight = 0;
+  const wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
+
   for (const line of lines) {
-    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px Inter, sans-serif`;
-    const words = line.text.split(' ');
-    let currentLine = '';
-    let wrappedLines = 0;
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
-        wrappedLines++;
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    }
-    wrappedLines++;
-    totalTextHeight += wrappedLines * line.fontSize * lineHeight;
+    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px "Segoe UI", Roboto, sans-serif`;
+    const wrapped = wrapText(ctx, line.text, textContentWidth);
+    wrappedTextData.push({ lines: wrapped, fontSize: line.fontSize, bold: line.bold });
+    totalTextHeight += wrapped.length * line.fontSize * lineHeight;
   }
 
-  const overlayContentHeight = Math.max(miniMapSize, totalTextHeight);
-  const overlayHeight = overlayContentHeight + overlayPadding * 2;
-  const overlayWidth = canvas.width - overlayMargin * 2;
-  const overlayX = overlayMargin;
-  const overlayY = canvas.height - overlayMargin - overlayHeight;
+  // Add space for watermark
+  const watermarkHeight = proSettings.watermarkText ? fontSizeWatermark + padding * 0.5 : 0;
 
-  // Draw overlay background
+  const infoBoxContentH = totalTextHeight + watermarkHeight;
+  const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH + padding * 2);
+
+  // Position everything at bottom-right
+  const totalHeight = infoBoxHeight;
+  const overlayBottom = canvasH - margin;
+
+  // Info box (dark background) - right side
+  const infoBoxX = margin + miniMapSize + gap;
+  const infoBoxY = overlayBottom - infoBoxHeight;
+
   const opacity = proSettings.overlayOpacity / 100;
   ctx.fillStyle = `rgba(0, 0, 0, ${opacity * 0.85})`;
-  roundRect(ctx, overlayX, overlayY, overlayWidth, overlayHeight, 16 * scale);
+  roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
   ctx.fill();
 
-  // Draw mini map
-  const miniMapX = overlayX + overlayPadding;
-  const miniMapY = overlayY + overlayPadding;
+  // Mini map - left side, aligned to bottom of info box
+  const mmX = margin;
+  const mmY = overlayBottom - miniMapSize;
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
     ctx.save();
-    roundRect(ctx, miniMapX, miniMapY, miniMapSize, miniMapSize, 12 * scale);
+    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
     ctx.clip();
-    ctx.drawImage(mapImg, miniMapX, miniMapY, miniMapSize, miniMapSize);
+    ctx.drawImage(mapImg, mmX, mmY, miniMapSize, miniMapSize);
     ctx.restore();
   } catch {
-    // Fallback: draw placeholder map
+    // Fallback map placeholder
     ctx.save();
-    ctx.fillStyle = '#2d5016';
-    roundRect(ctx, miniMapX, miniMapY, miniMapSize, miniMapSize, 12 * scale);
+    ctx.fillStyle = '#e8e4d8';
+    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
     ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `${Math.round(10 * scale)}px Inter, sans-serif`;
+    ctx.fillStyle = '#999';
+    ctx.font = `${Math.round(10 * scale)}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText('Map', miniMapX + miniMapSize / 2, miniMapY + miniMapSize / 2 + 4 * scale);
+    ctx.fillText('Map', mmX + miniMapSize / 2, mmY + miniMapSize / 2 + 4 * scale);
     ctx.restore();
   }
 
-  // Draw text
-  const textX = miniMapX + miniMapSize + gap;
-  let textY = overlayY + overlayPadding + fontSizeTitle;
+  // Draw text inside info box
+  const textX = infoBoxX + padding;
+  let textY = infoBoxY + padding + fontSizeTitle * 0.9;
 
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
 
-  for (const line of lines) {
-    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px Inter, sans-serif`;
-
-    // Word wrap
-    const words = line.text.split(' ');
-    let currentLine = '';
-
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      if (ctx.measureText(testLine).width > maxTextWidth && currentLine) {
-        ctx.fillText(currentLine, textX, textY);
-        textY += line.fontSize * lineHeight;
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
+  for (const block of wrappedTextData) {
+    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Segoe UI", Roboto, sans-serif`;
+    for (const wLine of block.lines) {
+      ctx.fillText(wLine, textX, textY);
+      textY += block.fontSize * lineHeight;
     }
-    ctx.fillText(currentLine, textX, textY);
-    textY += line.fontSize * lineHeight;
   }
 
-  // Watermark
+  // Watermark - top right of info box
   if (proSettings.watermarkText) {
     ctx.save();
     ctx.globalAlpha = 0.7;
-    ctx.font = `500 ${fontSizeWatermark}px Inter, sans-serif`;
+    ctx.font = `500 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'right';
+
+    // Draw small camera icon placeholder (📷) + text
+    const wmText = `📷 ${proSettings.watermarkText}`;
     ctx.fillText(
-      proSettings.watermarkText,
-      overlayX + overlayWidth - overlayPadding,
-      overlayY + overlayPadding + fontSizeWatermark
+      wmText,
+      infoBoxX + infoBoxWidth - padding,
+      infoBoxY + padding + fontSizeWatermark * 0.8
     );
     ctx.restore();
   }
+}
 
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob!), 'image/png', 1.0);
-  });
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const result: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      result.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) result.push(currentLine);
+  return result;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -184,8 +230,8 @@ function loadStaticMap(lat: number, lng: number, size: number, scale: number): P
       return;
     }
 
-    const pixelSize = Math.round(size / scale);
-    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=14&size=${pixelSize}x${pixelSize}&scale=2&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+    const pixelSize = Math.max(Math.round(size / scale), 100);
+    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=${pixelSize}x${pixelSize}&scale=2&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -199,155 +245,4 @@ function getFlagEmoji(countryCode: string): string {
   if (!countryCode) return '';
   const cc = countryCode.toUpperCase();
   return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
-}
-
-// Preview version that draws on a provided canvas
-export async function renderPreview(
-  canvas: HTMLCanvasElement,
-  image: HTMLImageElement,
-  location: LocationData,
-  dateTime: DateTimeData,
-  proSettings: ProSettings
-): Promise<void> {
-  const ctx = canvas.getContext('2d')!;
-
-  // Scale to fit preview
-  const maxW = canvas.parentElement?.clientWidth || 600;
-  const ratio = image.naturalWidth / image.naturalHeight;
-  const displayW = Math.min(maxW, image.naturalWidth);
-  const displayH = displayW / ratio;
-
-  canvas.width = displayW;
-  canvas.height = displayH;
-
-  ctx.drawImage(image, 0, 0, displayW, displayH);
-
-  const scale = Math.max(displayW / 1200, 0.5);
-  const overlayMargin = Math.round(12 * scale);
-  const overlayPadding = Math.round(12 * scale);
-  const miniMapSize = Math.round(100 * scale);
-  const gap = Math.round(10 * scale);
-
-  const fontSizeTitle = Math.round(14 * scale);
-  const fontSizeBody = Math.round(10 * scale);
-  const fontSizeWatermark = Math.round(8 * scale);
-  const lineHeight = 1.5;
-
-  const flag = getFlagEmoji(location.countryCode);
-  const titleLine = `${location.district}, ${location.province}, ${location.country} ${flag}`;
-
-  const textLines: { text: string; fontSize: number; bold: boolean }[] = [
-    { text: titleLine, fontSize: fontSizeTitle, bold: true },
-  ];
-
-  if (proSettings.showFullAddress) {
-    textLines.push({ text: location.fullAddress, fontSize: fontSizeBody, bold: false });
-  }
-
-  if (proSettings.showLatLong) {
-    textLines.push({
-      text: `Lat ${location.lat.toFixed(6)}° Long ${location.lng.toFixed(6)}°`,
-      fontSize: fontSizeBody,
-      bold: false,
-    });
-  }
-
-  textLines.push({
-    text: formatDateTime(dateTime.date, dateTime.timezoneOffset, proSettings.use24hFormat),
-    fontSize: fontSizeBody,
-    bold: false,
-  });
-
-  const maxTextWidth = displayW - overlayMargin * 2 - overlayPadding * 2 - miniMapSize - gap - overlayPadding;
-
-  let totalTextHeight = 0;
-  for (const line of textLines) {
-    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px Inter, sans-serif`;
-    const words = line.text.split(' ');
-    let currentLine = '';
-    let wLines = 0;
-    for (const word of words) {
-      const test = currentLine ? `${currentLine} ${word}` : word;
-      if (ctx.measureText(test).width > maxTextWidth && currentLine) {
-        wLines++;
-        currentLine = word;
-      } else {
-        currentLine = test;
-      }
-    }
-    wLines++;
-    totalTextHeight += wLines * line.fontSize * lineHeight;
-  }
-
-  const overlayContentH = Math.max(miniMapSize, totalTextHeight);
-  const overlayH = overlayContentH + overlayPadding * 2;
-  const overlayW = displayW - overlayMargin * 2;
-  const overlayX = overlayMargin;
-  const overlayY = displayH - overlayMargin - overlayH;
-
-  const opacity = proSettings.overlayOpacity / 100;
-  ctx.fillStyle = `rgba(0, 0, 0, ${opacity * 0.85})`;
-  roundRect(ctx, overlayX, overlayY, overlayW, overlayH, 10 * scale);
-  ctx.fill();
-
-  // Mini map placeholder for preview
-  const mmX = overlayX + overlayPadding;
-  const mmY = overlayY + overlayPadding;
-
-  try {
-    const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
-    ctx.save();
-    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, 8 * scale);
-    ctx.clip();
-    ctx.drawImage(mapImg, mmX, mmY, miniMapSize, miniMapSize);
-    ctx.restore();
-  } catch {
-    ctx.save();
-    ctx.fillStyle = '#3a7d44';
-    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, 8 * scale);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = `${Math.round(8 * scale)}px Inter, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText('Map', mmX + miniMapSize / 2, mmY + miniMapSize / 2 + 3);
-    ctx.restore();
-  }
-
-  const textX = mmX + miniMapSize + gap;
-  let textY = overlayY + overlayPadding + fontSizeTitle;
-
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#ffffff';
-
-  for (const line of textLines) {
-    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px Inter, sans-serif`;
-    const words = line.text.split(' ');
-    let currentLine = '';
-    for (const word of words) {
-      const test = currentLine ? `${currentLine} ${word}` : word;
-      if (ctx.measureText(test).width > maxTextWidth && currentLine) {
-        ctx.fillText(currentLine, textX, textY);
-        textY += line.fontSize * lineHeight;
-        currentLine = word;
-      } else {
-        currentLine = test;
-      }
-    }
-    ctx.fillText(currentLine, textX, textY);
-    textY += line.fontSize * lineHeight;
-  }
-
-  if (proSettings.watermarkText) {
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.font = `500 ${fontSizeWatermark}px Inter, sans-serif`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'right';
-    ctx.fillText(
-      proSettings.watermarkText,
-      overlayX + overlayW - overlayPadding,
-      overlayY + overlayPadding + fontSizeWatermark
-    );
-    ctx.restore();
-  }
 }
