@@ -56,7 +56,7 @@ async function drawOverlay(
 ) {
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
 
-  const margin = Math.round(20 * scale);
+  const margin = Math.round(25 * scale);
   const padding = Math.round(18 * scale);
   const miniMapSize = Math.round(220 * scale);
   const gap = Math.round(10 * scale);
