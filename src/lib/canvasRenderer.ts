@@ -58,19 +58,19 @@ async function drawOverlay(
   proSettings: ProSettings,
   isPreview: boolean
 ) {
-  const scale = Math.max(canvasW / 1080, isPreview ? 0.45 : 0.8);
+  const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
 
-  const margin = Math.round(20 * scale);
-  const padding = Math.round(14 * scale);
-  const miniMapSize = Math.round(160 * scale);
-  const gap = Math.round(8 * scale);
-  const borderRadius = Math.round(14 * scale);
-  const mapBorderRadius = Math.round(10 * scale);
+  const margin = Math.round(24 * scale);
+  const padding = Math.round(18 * scale);
+  const miniMapSize = Math.round(220 * scale);
+  const gap = Math.round(10 * scale);
+  const borderRadius = Math.round(16 * scale);
+  const mapBorderRadius = Math.round(12 * scale);
 
-  const fontSizeTitle = Math.round(16 * scale);
-  const fontSizeBody = Math.round(11 * scale);
-  const fontSizeWatermark = Math.round(9 * scale);
-  const lineHeight = 1.45;
+  const fontSizeTitle = Math.round(26 * scale);
+  const fontSizeBody = Math.round(18 * scale);
+  const fontSizeWatermark = Math.round(13 * scale);
+  const lineHeight = 1.5;
 
   // Build text lines
   const flag = getFlagEmoji(location.countryCode);
@@ -98,21 +98,20 @@ async function drawOverlay(
     bold: false,
   });
 
-  // Info box width = total width - margins - map - gap
-  const infoBoxWidth = canvasW - margin * 2 - miniMapSize - gap;
+  // Total overlay width ~70% of canvas
+  const overlayWidth = Math.round(canvasW * 0.72);
+  const infoBoxWidth = overlayWidth - miniMapSize - gap;
   const textContentWidth = infoBoxWidth - padding * 2;
 
   // Watermark badge dimensions
-  const wmBadgePadH = Math.round(6 * scale);
-  const wmBadgePadV = Math.round(4 * scale);
+  const wmBadgePadH = Math.round(10 * scale);
+  const wmBadgePadV = Math.round(6 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
-  if (proSettings.watermarkText) {
-    ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
-    const wmText = `📷 ${proSettings.watermarkText}`;
-    wmBadgeW = ctx.measureText(wmText).width + wmBadgePadH * 2;
-    wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
-  }
+  const wmText = proSettings.watermarkText ? `📷  ${proSettings.watermarkText}` : '📷  GPS Map Camera';
+  ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
+  wmBadgeW = ctx.measureText(wmText).width + wmBadgePadH * 2;
+  wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
 
   // Measure text height
   let totalTextHeight = 0;
@@ -125,50 +124,49 @@ async function drawOverlay(
     totalTextHeight += wrapped.length * line.fontSize * lineHeight;
   }
 
-  const infoBoxContentH = totalTextHeight;
-  const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH + padding * 2);
+  const infoBoxContentH = totalTextHeight + padding * 2;
+  const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH);
 
+  // Position: bottom-center of image
+  const overlayLeft = Math.round((canvasW - overlayWidth) / 2);
   const overlayBottom = canvasH - margin;
 
-  // Info box (dark background) - right side
-  const infoBoxX = margin + miniMapSize + gap;
+  // Badge sits ABOVE the info box, top-right
+  const badgeGap = Math.round(6 * scale);
+  const badgeX = overlayLeft + miniMapSize + gap + infoBoxWidth - wmBadgeW;
+  const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
+
+  // Draw badge (separate small dark box above info box)
+  ctx.save();
+  ctx.fillStyle = 'rgba(50, 50, 50, 0.85)';
+  roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, Math.round(6 * scale));
+  ctx.fill();
+  ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(wmText, badgeX + wmBadgeW / 2, badgeY + wmBadgePadV + fontSizeWatermark * 0.85);
+  ctx.restore();
+
+  // Info box (dark background) - right of map
+  const infoBoxX = overlayLeft + miniMapSize + gap;
   const infoBoxY = overlayBottom - infoBoxHeight;
 
   const opacity = proSettings.overlayOpacity / 100;
-  ctx.fillStyle = `rgba(0, 0, 0, ${opacity * 0.85})`;
+  ctx.fillStyle = `rgba(50, 50, 50, ${opacity * 0.88})`;
   roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
   ctx.fill();
 
-  // Watermark badge - small box at top-right corner of info box
-  if (proSettings.watermarkText && wmBadgeW > 0) {
-    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW - Math.round(6 * scale);
-    const badgeY = infoBoxY + Math.round(6 * scale);
-    const badgeRadius = Math.round(6 * scale);
-
-    ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, 0.55)`;
-    roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, badgeRadius);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.9;
-    ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      `📷 ${proSettings.watermarkText}`,
-      badgeX + wmBadgeW / 2,
-      badgeY + wmBadgePadV + fontSizeWatermark * 0.85
-    );
-    ctx.restore();
-  }
-
-  // Mini map - left side, aligned to bottom of info box
-  const mmX = margin;
+  // Mini map - left side, bottom-aligned with info box
+  const mmX = overlayLeft;
   const mmY = overlayBottom - miniMapSize;
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
     ctx.save();
+    // White background behind map
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
+    ctx.fill();
     roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
     ctx.clip();
     ctx.drawImage(mapImg, mmX, mmY, miniMapSize, miniMapSize);
@@ -179,7 +177,7 @@ async function drawOverlay(
     roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
     ctx.fill();
     ctx.fillStyle = '#999';
-    ctx.font = `${Math.round(10 * scale)}px sans-serif`;
+    ctx.font = `${Math.round(12 * scale)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText('Map', mmX + miniMapSize / 2, mmY + miniMapSize / 2 + 4 * scale);
     ctx.restore();
