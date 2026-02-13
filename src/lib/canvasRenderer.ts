@@ -62,6 +62,7 @@ async function drawOverlay(
   proSettings: ProSettings,
   isPreview: boolean
 ) {
+  console.log('Using updated renderer v2 - with local flags');
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
 
   const margin = Math.round(10 * scale);
@@ -77,11 +78,12 @@ async function drawOverlay(
   const lineHeight = 1.5;
 
   // Build text lines
-  const flag = getFlagEmoji(location.countryCode);
-  const titleLine = `${location.district}, ${location.province}, ${location.country} ${flag}`;
+  // Build text lines
+  // const flag = getFlagEmoji(location.countryCode); // Removed font-based flag
+  const titleLine = `${location.district}, ${location.province}, ${location.country}`;
 
-  const lines: { text: string; fontSize: number; bold: boolean }[] = [
-    { text: titleLine, fontSize: fontSizeTitle, bold: true },
+  const lines: { text: string; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [
+    { text: titleLine, fontSize: fontSizeTitle, bold: true, hasFlag: true },
   ];
 
   if (proSettings.showFullAddress) {
@@ -102,13 +104,15 @@ async function drawOverlay(
     bold: false,
   });
 
+  // ... (watermark badge calculation remains similar) ...
   // Watermark badge dimensions
   const wmBadgePadH = Math.round(10 * scale);
   const wmBadgePadV = Math.round(6 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
   const wmText = proSettings.watermarkText ? proSettings.watermarkText : 'GPS Map Camera';
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+  // Prioritize Noto Color Emoji for colored flags
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
 
   // Icon dimensions
   const iconSize = Math.round(fontSizeWatermark * 1.5);
@@ -132,7 +136,8 @@ async function drawOverlay(
   let maxLineWidthFound = 0;
   let currentScaleFactor = 1.0;
   const minScaleFactor = 0.5; // Don't shrink below 50%
-  let wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let wrappedTextData: { lines: string[]; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [];
 
   // Loop to find best fit
   while (true) {
@@ -142,13 +147,17 @@ async function drawOverlay(
 
     for (const line of lines) {
       const scaledFontSize = Math.round(line.fontSize * currentScaleFactor);
-      ctx.font = `400 ${scaledFontSize}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-      const wrapped = wrapText(ctx, line.text, maxTextContentWidth);
-      wrappedTextData.push({ lines: wrapped, fontSize: scaledFontSize, bold: line.bold });
+      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+
+      // Reserve space for flag if needed
+      const flagSpace = line.hasFlag ? Math.round(scaledFontSize * 1.2) + Math.round(8 * scale) : 0;
+
+      const wrapped = wrapText(ctx, line.text, maxTextContentWidth - flagSpace);
+      wrappedTextData.push({ lines: wrapped, fontSize: scaledFontSize, bold: line.bold, hasFlag: line.hasFlag });
       totalTextHeight += wrapped.length * scaledFontSize * lineHeight;
 
       for (const wLine of wrapped) {
-        const w = ctx.measureText(wLine).width;
+        const w = ctx.measureText(wLine).width + (line.hasFlag ? flagSpace : 0); // Add flag space to width check
         if (w > maxLineWidthFound) maxLineWidthFound = w;
       }
     }
@@ -163,11 +172,9 @@ async function drawOverlay(
   }
 
   // Calculate dynamic widths based on content
-  const contentWidth = maxTextContentWidth; // Force use full width
+  // const contentWidth = maxTextContentWidth; // Force use full width
   const infoBoxWidth = maxInfoBoxWidth;
   const overlayWidth = maxOverlayAllowed;
-
-  const infoBoxContentH = totalTextHeight + padding * 2;
 
   // Position: bottom-center of image
   const overlayLeft = Math.round((canvasW - overlayWidth) / 2);
@@ -179,8 +186,6 @@ async function drawOverlay(
   const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
 
   const opacity = proSettings.overlayOpacity / 100;
-  // ctx.save(); // Removed globalAlpha
-  // ctx.globalAlpha = opacity;
 
   // Draw badge (separate small dark box above info box)
   ctx.save();
@@ -188,7 +193,7 @@ async function drawOverlay(
   const badgeR = Math.round(6 * scale);
   roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, { tl: badgeR, tr: badgeR, br: 0, bl: 0 });
   ctx.fill();
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
 
@@ -240,7 +245,7 @@ async function drawOverlay(
     const offset = (size - miniMapSize) / 2;
     ctx.drawImage(mapImg, mmX - offset, mmY - offset, size, size);
 
-    // Custom Google Logo (Re-added per user request)
+    // Custom Google Logo
     ctx.save();
     const logoFontSize = Math.round(30 * scale);
     ctx.font = `500 ${logoFontSize}px "Product Sans", "Roboto", "Arial", sans-serif`;
@@ -304,17 +309,52 @@ async function drawOverlay(
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
 
-  for (const block of wrappedTextData) {
-    ctx.font = `400 ${block.fontSize}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-    for (const wLine of block.lines) {
-      ctx.fillText(wLine, textX, textY);
-      textY += block.fontSize * lineHeight;
+  // Load flag image if needed
+  let flagImg: HTMLImageElement | null = null;
+  if (lines[0].hasFlag && location.countryCode) {
+    try {
+      flagImg = await loadFlagImage(location.countryCode);
+    } catch (e) {
+      console.warn('Failed to load flag', e);
     }
   }
 
-  // Restore opacity (Removed ctx.restore() matching the removed ctx.save())
-  // ctx.restore();
+  for (let i = 0; i < wrappedTextData.length; i++) {
+    const block = wrappedTextData[i];
+    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+
+    for (let j = 0; j < block.lines.length; j++) {
+      const wLine = block.lines[j];
+      ctx.fillText(wLine, textX, textY);
+
+      // Draw flag on the first line of the first block if it has a flag
+      if (block.hasFlag && j === 0 && flagImg) {
+        const textWidth = ctx.measureText(wLine).width;
+        // Make flag height proportional to font size
+        const flagH = Math.round(block.fontSize * 1.3);
+        const flagW = Math.round(flagH * 1.2); // Standard 3:2 aspect ratio
+
+        // Vertically center relative to cap height (approx 0.7em)
+        // Center of Cap Height is at (textY - 0.35 * fontSize)
+        // Flag Top = Center - flagH / 2
+        // flagY = (textY - 0.35 * fontSize) - (flagH / 2)
+        const flagY = textY - Math.round(block.fontSize * 0.35) - Math.round(flagH / 2);
+
+        const flagX = textX + textWidth + Math.round(10 * scale);
+
+        ctx.save();
+        // Add a small shadow/outline to flag
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 2;
+        ctx.drawImage(flagImg, flagX, flagY, flagW, flagH);
+        ctx.restore();
+      }
+
+      textY += block.fontSize * lineHeight;
+    }
+  }
 }
+
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(' ');
@@ -383,6 +423,32 @@ function loadBadgeIcon(): Promise<HTMLImageElement> {
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = '/icon.png'; // Placeholder icon from public folder
+  });
+}
+
+
+function loadFlagImage(countryCode: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    if (!countryCode) return reject(new Error('No country code'));
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      console.log(`Flag loaded successfully: ${img.src}`);
+      resolve(img);
+    };
+    img.onerror = () => {
+      console.warn(`Local flag not found for ${countryCode}. Tried loading: ${img.src}`);
+      reject(new Error(`Flag not found for ${countryCode}`));
+    };
+
+    // Convert country code to unicode codepoint hex string (e.g. ID -> u1f1ee_1f1e9)
+    const cc = countryCode.toUpperCase();
+    const codes = [...cc].map((c) => (0x1f1e6 + c.charCodeAt(0) - 65).toString(16));
+    const filename = 'u' + codes.join('_');
+
+    const src = `/flags/${filename}.png`;
+    console.log(`Attempting to load flag for ${countryCode}: ${src}`);
+    img.src = src;
   });
 }
 
