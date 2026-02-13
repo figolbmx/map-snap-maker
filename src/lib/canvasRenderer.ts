@@ -121,7 +121,8 @@ async function drawOverlay(
   }
 
   const infoBoxContentH = totalTextHeight + padding * 2;
-  const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH);
+  const targetHeight = Math.round(canvasH * 0.16);
+  const infoBoxHeight = Math.max(targetHeight, infoBoxContentH);
 
   // Position: bottom-center of image
   const overlayLeft = Math.round((canvasW - overlayWidth) / 2);
