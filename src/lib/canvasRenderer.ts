@@ -37,16 +37,12 @@ export async function renderPreview(
 ): Promise<void> {
   const ctx = canvas.getContext('2d')!;
 
-  const maxW = canvas.parentElement?.clientWidth || 600;
-  const ratio = image.naturalWidth / image.naturalHeight;
-  const displayW = Math.min(maxW, image.naturalWidth);
-  const displayH = displayW / ratio;
+  // Render at full resolution so overlay looks identical to download
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  ctx.drawImage(image, 0, 0);
 
-  canvas.width = displayW;
-  canvas.height = displayH;
-  ctx.drawImage(image, 0, 0, displayW, displayH);
-
-  await drawOverlay(ctx, displayW, displayH, location, dateTime, proSettings, true);
+  await drawOverlay(ctx, image.naturalWidth, image.naturalHeight, location, dateTime, proSettings, false);
 }
 
 async function drawOverlay(
