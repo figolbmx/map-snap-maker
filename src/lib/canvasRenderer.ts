@@ -60,19 +60,17 @@ async function drawOverlay(
 ) {
   const scale = Math.max(canvasW / 1080, isPreview ? 0.45 : 0.8);
 
-  // Tight margin - overlay sits close to bottom edge like reference
-  const margin = Math.round(14 * scale);
-  const padding = Math.round(12 * scale);
+  const margin = Math.round(20 * scale);
+  const padding = Math.round(14 * scale);
   const miniMapSize = Math.round(160 * scale);
-  const gap = Math.round(6 * scale);
-  const borderRadius = Math.round(10 * scale);
-  const mapBorderRadius = Math.round(8 * scale);
+  const gap = Math.round(8 * scale);
+  const borderRadius = Math.round(14 * scale);
+  const mapBorderRadius = Math.round(10 * scale);
 
-  // Title large, body compact - matching reference proportions
-  const fontSizeTitle = Math.round(20 * scale);
+  const fontSizeTitle = Math.round(16 * scale);
   const fontSizeBody = Math.round(11 * scale);
   const fontSizeWatermark = Math.round(9 * scale);
-  const lineHeight = 1.35;
+  const lineHeight = 1.45;
 
   // Build text lines
   const flag = getFlagEmoji(location.countryCode);
@@ -105,8 +103,8 @@ async function drawOverlay(
   const textContentWidth = infoBoxWidth - padding * 2;
 
   // Watermark badge dimensions
-  const wmBadgePadH = Math.round(8 * scale);
-  const wmBadgePadV = Math.round(5 * scale);
+  const wmBadgePadH = Math.round(6 * scale);
+  const wmBadgePadV = Math.round(4 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
   if (proSettings.watermarkText) {
@@ -116,7 +114,7 @@ async function drawOverlay(
     wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
   }
 
-  // Measure text height with auto-sizing
+  // Measure text height
   let totalTextHeight = 0;
   const wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
 
@@ -127,8 +125,8 @@ async function drawOverlay(
     totalTextHeight += wrapped.length * line.fontSize * lineHeight;
   }
 
-  // Box height fits content with padding
-  const infoBoxHeight = totalTextHeight + padding * 2;
+  const infoBoxContentH = totalTextHeight;
+  const infoBoxHeight = Math.max(miniMapSize, infoBoxContentH + padding * 2);
 
   const overlayBottom = canvasH - margin;
 
@@ -137,18 +135,18 @@ async function drawOverlay(
   const infoBoxY = overlayBottom - infoBoxHeight;
 
   const opacity = proSettings.overlayOpacity / 100;
-  ctx.fillStyle = `rgba(50, 50, 50, ${opacity * 0.82})`;
+  ctx.fillStyle = `rgba(0, 0, 0, ${opacity * 0.85})`;
   roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
   ctx.fill();
 
-  // Watermark badge - own small box ABOVE info box at top-right
+  // Watermark badge - small box at top-right corner of info box
   if (proSettings.watermarkText && wmBadgeW > 0) {
-    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW;
-    const badgeY = infoBoxY - wmBadgeH - Math.round(6 * scale);
+    const badgeX = infoBoxX + infoBoxWidth - wmBadgeW - Math.round(6 * scale);
+    const badgeY = infoBoxY + Math.round(6 * scale);
     const badgeRadius = Math.round(6 * scale);
 
     ctx.save();
-    ctx.fillStyle = `rgba(50, 50, 50, 0.75)`;
+    ctx.fillStyle = `rgba(0, 0, 0, 0.55)`;
     roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, badgeRadius);
     ctx.fill();
 
@@ -164,9 +162,9 @@ async function drawOverlay(
     ctx.restore();
   }
 
-  // Mini map - left side, bottom aligned with info box
+  // Mini map - left side, aligned to bottom of info box
   const mmX = margin;
-  const mmY = overlayBottom - Math.max(miniMapSize, infoBoxHeight);
+  const mmY = overlayBottom - miniMapSize;
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
@@ -187,7 +185,7 @@ async function drawOverlay(
     ctx.restore();
   }
 
-  // Draw text - vertically centered in info box
+  // Draw text inside info box - vertically centered
   const textX = infoBoxX + padding;
   const textBlockTop = infoBoxY + (infoBoxHeight - totalTextHeight) / 2;
   let textY = textBlockTop + wrappedTextData[0]?.fontSize * 0.9;
@@ -244,7 +242,7 @@ function loadStaticMap(lat: number, lng: number, size: number, scale: number): P
       return;
     }
 
-    const pixelSize = Math.max(Math.round(size), 200);
+    const pixelSize = Math.max(Math.round(size / scale), 100);
     const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=${pixelSize}x${pixelSize}&scale=2&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
