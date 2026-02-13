@@ -56,7 +56,7 @@ async function drawOverlay(
 ) {
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
 
-  const margin = Math.round(24 * scale);
+  const margin = Math.round(70 * scale);
   const padding = Math.round(18 * scale);
   const miniMapSize = Math.round(220 * scale);
   const gap = Math.round(10 * scale);
@@ -95,7 +95,7 @@ async function drawOverlay(
   });
 
   // Total overlay width ~70% of canvas
-  const overlayWidth = Math.round(canvasW * 0.72);
+  const overlayWidth = Math.round(canvasW * 0.80);
   const infoBoxWidth = overlayWidth - miniMapSize - gap;
   const textContentWidth = infoBoxWidth - padding * 2;
 
