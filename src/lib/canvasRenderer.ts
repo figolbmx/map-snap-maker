@@ -21,6 +21,10 @@ export async function renderGeoTagImage(
   canvas.height = image.naturalHeight;
   ctx.drawImage(image, 0, 0);
 
+  // Wait for font to load
+  await document.fonts.load('400 20px "Noto Color Emoji"');
+
+
   await drawOverlay(ctx, canvas.width, canvas.height, location, dateTime, proSettings, false);
 
   return new Promise((resolve) => {
@@ -41,6 +45,10 @@ export async function renderPreview(
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   ctx.drawImage(image, 0, 0);
+
+  // Wait for font to load
+  await document.fonts.load('400 20px "Noto Color Emoji"');
+
 
   await drawOverlay(ctx, image.naturalWidth, image.naturalHeight, location, dateTime, proSettings, false);
 }
