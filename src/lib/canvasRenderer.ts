@@ -24,7 +24,7 @@ export async function renderGeoTagImage(
   await drawOverlay(ctx, canvas.width, canvas.height, location, dateTime, proSettings, false);
 
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob!), 'image/png', 1.0);
+    canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.9);
   });
 }
 
@@ -56,9 +56,9 @@ async function drawOverlay(
 ) {
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
 
-  const margin = Math.round(25 * scale);
-  const padding = Math.round(18 * scale);
-  const miniMapSize = Math.round(220 * scale);
+  const margin = Math.round(10 * scale);
+  const padding = Math.round(16 * scale);
+  const miniMapSize = Math.round(180 * scale);
   const gap = Math.round(10 * scale);
   const borderRadius = Math.round(16 * scale);
   const mapBorderRadius = Math.round(12 * scale);
@@ -94,71 +94,130 @@ async function drawOverlay(
     bold: false,
   });
 
-  // Total overlay width ~70% of canvas
-  const overlayWidth = Math.round(canvasW * 0.82);
-  const infoBoxWidth = overlayWidth - miniMapSize - gap;
-  const textContentWidth = infoBoxWidth - padding * 2;
-
   // Watermark badge dimensions
   const wmBadgePadH = Math.round(10 * scale);
   const wmBadgePadV = Math.round(6 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
-  const wmText = proSettings.watermarkText ? `📷  ${proSettings.watermarkText}` : '📷  GPS Map Camera';
-  ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
-  wmBadgeW = ctx.measureText(wmText).width + wmBadgePadH * 2;
-  wmBadgeH = fontSizeWatermark + wmBadgePadV * 2;
+  const wmText = proSettings.watermarkText ? proSettings.watermarkText : 'GPS Map Camera';
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
 
-  // Measure text height
+  // Icon dimensions
+  const iconSize = Math.round(fontSizeWatermark * 1.5);
+  const iconPadding = Math.round(4 * scale);
+
+  wmBadgeW = iconSize + iconPadding + ctx.measureText(wmText).width + wmBadgePadH * 2;
+  wmBadgeH = Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2;
+
+  // Calculate target height (22% of canvas)
+  const targetHeight = Math.round(canvasH * 0.22);
+  const infoBoxHeight = targetHeight;
+  const maxTextHeight = infoBoxHeight - padding * 2;
+
+  // Initial max width constraint (82% of canvas minus map and padding)
+  const maxOverlayAllowed = Math.round(canvasW * 0.82);
+  const maxInfoBoxWidth = maxOverlayAllowed - miniMapSize - gap;
+  const maxTextContentWidth = maxInfoBoxWidth - padding * 2;
+
+  // Measure text height and Width - with auto scaling
   let totalTextHeight = 0;
-  const wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
+  let maxLineWidthFound = 0;
+  let currentScaleFactor = 1.0;
+  const minScaleFactor = 0.5; // Don't shrink below 50%
+  let wrappedTextData: { lines: string[]; fontSize: number; bold: boolean }[] = [];
 
-  for (const line of lines) {
-    ctx.font = `${line.bold ? '700' : '400'} ${line.fontSize}px "Segoe UI", Roboto, sans-serif`;
-    const wrapped = wrapText(ctx, line.text, textContentWidth);
-    wrappedTextData.push({ lines: wrapped, fontSize: line.fontSize, bold: line.bold });
-    totalTextHeight += wrapped.length * line.fontSize * lineHeight;
+  // Loop to find best fit
+  while (true) {
+    wrappedTextData = [];
+    totalTextHeight = 0;
+    maxLineWidthFound = 0;
+
+    for (const line of lines) {
+      const scaledFontSize = Math.round(line.fontSize * currentScaleFactor);
+      ctx.font = `400 ${scaledFontSize}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      const wrapped = wrapText(ctx, line.text, maxTextContentWidth);
+      wrappedTextData.push({ lines: wrapped, fontSize: scaledFontSize, bold: line.bold });
+      totalTextHeight += wrapped.length * scaledFontSize * lineHeight;
+
+      for (const wLine of wrapped) {
+        const w = ctx.measureText(wLine).width;
+        if (w > maxLineWidthFound) maxLineWidthFound = w;
+      }
+    }
+
+    // Check if it fits
+    if (totalTextHeight <= maxTextHeight || currentScaleFactor <= minScaleFactor) {
+      break;
+    }
+
+    // Reduce scale and try again
+    currentScaleFactor -= 0.05;
   }
 
+  // Calculate dynamic widths based on content
+  const contentWidth = maxTextContentWidth; // Force use full width
+  const infoBoxWidth = maxInfoBoxWidth;
+  const overlayWidth = maxOverlayAllowed;
+
   const infoBoxContentH = totalTextHeight + padding * 2;
-  const targetHeight = Math.round(canvasH * 0.16);
-  const infoBoxHeight = Math.max(targetHeight, infoBoxContentH);
 
   // Position: bottom-center of image
   const overlayLeft = Math.round((canvasW - overlayWidth) / 2);
   const overlayBottom = canvasH - margin;
 
   // Badge sits ABOVE the info box, top-right
-  const badgeGap = Math.round(6 * scale);
+  const badgeGap = 0;
   const badgeX = overlayLeft + miniMapSize + gap + infoBoxWidth - wmBadgeW;
   const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
 
+  const opacity = proSettings.overlayOpacity / 100;
+  // ctx.save(); // Removed globalAlpha
+  // ctx.globalAlpha = opacity;
+
   // Draw badge (separate small dark box above info box)
   ctx.save();
-  ctx.fillStyle = 'rgba(50, 50, 50, 0.85)';
-  roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, Math.round(6 * scale));
+  ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
+  const badgeR = Math.round(6 * scale);
+  roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, { tl: badgeR, tr: badgeR, br: 0, bl: 0 });
   ctx.fill();
-  ctx.font = `600 ${fontSizeWatermark}px "Segoe UI", Roboto, sans-serif`;
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
   ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.fillText(wmText, badgeX + wmBadgeW / 2, badgeY + wmBadgePadV + fontSizeWatermark * 0.85);
+  ctx.textAlign = 'left';
+
+  // Draw Icon
+  try {
+    const iconImg = await loadBadgeIcon();
+    ctx.drawImage(iconImg, badgeX + wmBadgePadH, badgeY + (wmBadgeH - iconSize) / 2, iconSize, iconSize);
+  } catch (e) {
+    // Fallback if icon fails
+    console.error('Failed to load icon', e);
+  }
+
+  // Draw Text
+  ctx.textBaseline = 'middle';
+  ctx.fillText(wmText, badgeX + wmBadgePadH + iconSize + iconPadding, badgeY + wmBadgeH / 2);
   ctx.restore();
 
-  // Info box (dark background) - right of map
+  // Info Box
   const infoBoxX = overlayLeft + miniMapSize + gap;
   const infoBoxY = overlayBottom - infoBoxHeight;
 
-  const opacity = proSettings.overlayOpacity / 100;
-  ctx.fillStyle = `rgba(50, 50, 50, ${opacity * 0.88})`;
-  roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, borderRadius);
+  // Use base color only, alpha is handled by globalAlpha
+  ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
+  roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, {
+    tl: borderRadius,
+    tr: 0,
+    br: borderRadius,
+    bl: borderRadius,
+  });
   ctx.fill();
 
-  // Mini map - left side, bottom-aligned with info box
+  // Mini Map
   const mmX = overlayLeft;
   const mmY = overlayBottom - miniMapSize;
 
   try {
-    const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
+    const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale, proSettings.mapType);
     ctx.save();
     // White background behind map
     ctx.fillStyle = '#ffffff';
@@ -166,7 +225,56 @@ async function drawOverlay(
     ctx.fill();
     roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
     ctx.clip();
-    ctx.drawImage(mapImg, mmX, mmY, miniMapSize, miniMapSize);
+    // Draw image slightly zoomed in to "crop" the Google logo at the bottom
+    // We scale by 1.3x and shift it up slightly
+    const zoomFactor = 1.5;
+    const size = miniMapSize * zoomFactor;
+    const offset = (size - miniMapSize) / 2;
+    ctx.drawImage(mapImg, mmX - offset, mmY - offset, size, size);
+
+    // Custom Google Logo (Re-added per user request)
+    ctx.save();
+    const logoFontSize = Math.round(30 * scale);
+    ctx.font = `500 ${logoFontSize}px "Product Sans", "Roboto", "Arial", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+
+    const logoX = mmX + 8 * scale;
+    const logoY = mmY + miniMapSize - 6 * scale;
+
+    if (proSettings.mapType === 'satellite') {
+      // Satellite: White text with shadow and black outline
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 4 * scale;
+
+      ctx.lineWidth = 3 * scale;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.lineJoin = 'round';
+      ctx.strokeText('Google', logoX, logoY);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('Google', logoX, logoY);
+    } else {
+      // Roadmap: Multi-colored Google logo
+      const colors = ['#4285F4', '#EA4335', '#FBBC05', '#4285F4', '#34A853', '#EA4335'];
+      const text = "Google";
+      let currentX = logoX;
+
+      // Add a subtle white outline for better contrast
+      ctx.lineWidth = 2 * scale;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineJoin = 'round';
+
+      for (let i = 0; i < text.length; i++) {
+        ctx.strokeText(text[i], currentX, logoY);
+        ctx.fillStyle = colors[i];
+        ctx.fillText(text[i], currentX, logoY);
+        currentX += ctx.measureText(text[i]).width;
+      }
+    }
+    ctx.restore();
+    ctx.restore();
+
     ctx.restore();
   } catch {
     ctx.save();
@@ -189,12 +297,15 @@ async function drawOverlay(
   ctx.fillStyle = '#ffffff';
 
   for (const block of wrappedTextData) {
-    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Segoe UI", Roboto, sans-serif`;
+    ctx.font = `400 ${block.fontSize}px "Roboto", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
     for (const wLine of block.lines) {
       ctx.fillText(wLine, textX, textY);
       textY += block.fontSize * lineHeight;
     }
   }
+
+  // Restore opacity (Removed ctx.restore() matching the removed ctx.save())
+  // ctx.restore();
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
@@ -215,21 +326,30 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return result;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number | { tl: number; tr: number; br: number; bl: number }
+) {
+  const radius = typeof r === 'number' ? { tl: r, tr: r, br: r, bl: r } : r;
+
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.moveTo(x + radius.tl, y);
+  ctx.lineTo(x + w - radius.tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius.tr);
+  ctx.lineTo(x + w, y + h - radius.br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius.br, y + h);
+  ctx.lineTo(x + radius.bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius.bl);
+  ctx.lineTo(x, y + radius.tl);
+  ctx.quadraticCurveTo(x, y, x + radius.tl, y);
   ctx.closePath();
 }
 
-function loadStaticMap(lat: number, lng: number, size: number, scale: number): Promise<HTMLImageElement> {
+function loadStaticMap(lat: number, lng: number, size: number, scale: number, mapType: 'satellite' | 'roadmap'): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -238,13 +358,23 @@ function loadStaticMap(lat: number, lng: number, size: number, scale: number): P
     }
 
     const pixelSize = Math.max(Math.round(size / scale), 100);
-    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=${pixelSize}x${pixelSize}&scale=2&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelSize}x${pixelSize}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
+  });
+}
+
+function loadBadgeIcon(): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = '/icon.png'; // Placeholder icon from public folder
   });
 }
 

@@ -48,18 +48,29 @@ export default function ProSettingsPanel({ settings, onChange }: ProSettingsProp
           />
         </div>
 
+
         <div>
-          <label className="text-sm text-foreground flex items-center gap-2 mb-2">
-            <Type className="w-3.5 h-3.5 text-muted-foreground" />
-            Watermark Text
-          </label>
-          <input
-            type="text"
-            value={settings.watermarkText}
-            onChange={(e) => onChange({ ...settings, watermarkText: e.target.value })}
-            placeholder="GPS Map Camera"
-            className="w-full input-dark rounded-lg px-3 py-2 text-sm"
-          />
+          <label className="text-sm text-foreground block mb-2">Tipe Peta</label>
+          <div className="flex bg-secondary rounded-lg p-1">
+            <button
+              onClick={() => onChange({ ...settings, mapType: 'satellite' })}
+              className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${settings.mapType === 'satellite'
+                ? 'bg-background text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              Satelite
+            </button>
+            <button
+              onClick={() => onChange({ ...settings, mapType: 'roadmap' })}
+              className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${settings.mapType === 'roadmap'
+                ? 'bg-background text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              Normal
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -74,14 +85,12 @@ function ToggleRow({ label, active, onToggle }: { label: string; active: boolean
     >
       <span className="text-sm text-foreground">{label}</span>
       <button
-        className={`relative w-10 h-5 rounded-full transition-colors ${
-          active ? 'bg-primary' : 'bg-secondary'
-        }`}
+        className={`relative w-10 h-5 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-secondary'
+          }`}
       >
         <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-foreground shadow transition-transform ${
-            active ? 'translate-x-5' : 'translate-x-0.5'
-          }`}
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-foreground shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
         />
         {active ? (
           <Eye className="absolute right-6 top-0.5 w-3.5 h-3.5 text-primary" />

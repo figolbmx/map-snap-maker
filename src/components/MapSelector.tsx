@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { MapPin, Search, AlertCircle } from 'lucide-react';
+import { MapPin, Search, AlertCircle, Crosshair } from 'lucide-react';
+
 import { loadGoogleMaps, hasApiKey } from '@/lib/googleMaps';
 import type { LocationData } from '@/types/geotag';
 
@@ -32,9 +33,15 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
           let countryCode = '';
 
           for (const comp of components) {
-            if (comp.types.includes('sublocality_level_1') || comp.types.includes('locality')) {
-              if (!district) district = comp.long_name;
+            // Prioritize Kecamatan (Level 3)
+            if (comp.types.includes('administrative_area_level_3')) {
+              district = comp.long_name;
             }
+            // Fallback to Kelurahan/Desa (Level 4) or Sublocality if Level 3 missing
+            if (!district && (comp.types.includes('sublocality_level_1') || comp.types.includes('locality'))) {
+              district = comp.long_name;
+            }
+
             if (comp.types.includes('administrative_area_level_2')) {
               city = comp.long_name;
             }
@@ -50,6 +57,13 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
           if (!district && city) district = city;
           if (!district) district = components[0]?.long_name || '';
 
+
+          let formattedAddress = result.results[0].formatted_address;
+          // Remove Plus Code if present (e.g. "9WQM+45M, ")
+          // Pattern: 4+ alphanumeric, +, 2+ alphanumeric, followed by comma or space
+          const plusCodeRegex = /^[A-Z0-9]{4,}\+[A-Z0-9]{2,}[, ]\s*/;
+          formattedAddress = formattedAddress.replace(plusCodeRegex, '');
+
           onLocationChange({
             lat,
             lng,
@@ -58,7 +72,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
             province,
             country,
             countryCode,
-            fullAddress: result.results[0].formatted_address,
+            fullAddress: formattedAddress,
           });
         }
       } catch (err) {
@@ -79,6 +93,30 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
     [onLocationChange]
   );
 
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        if (mapInstanceRef.current && markerRef.current) {
+          const pos = { lat: latitude, lng: longitude };
+          mapInstanceRef.current.panTo(pos);
+          mapInstanceRef.current.setZoom(16);
+          markerRef.current.setPosition(pos);
+          reverseGeocode(latitude, longitude);
+        }
+      },
+      (error) => {
+        console.error('Error getting location', error);
+        alert('Unable to retrieve your location');
+      }
+    );
+  }, [reverseGeocode]);
+
   useEffect(() => {
     if (!hasApiKey()) {
       setError('Set VITE_GOOGLE_MAPS_API_KEY di file .env');
@@ -98,7 +136,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
     if (!mapLoaded || !mapRef.current) return;
     const g = (window as any).google;
 
-    const defaultCenter = { lat: -7.611948, lng: 110.933013 };
+    const defaultCenter = { lat: -7.597110, lng: 110.949835 };
     const center = location ? { lat: location.lat, lng: location.lng } : defaultCenter;
 
     const map = new g.maps.Map(mapRef.current, {
@@ -226,9 +264,10 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
               }}
             />
           </div>
+
           <input
             type="text"
-            placeholder="Nama Kecamatan"
+            placeholder="Kecamatan"
             className="w-full input-dark rounded-lg px-3 py-2 text-sm"
             defaultValue={location?.district || 'Kecamatan Karanganyar'}
             onChange={(e) => {
@@ -265,14 +304,23 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
         Pilih Lokasi
       </h3>
 
-      <div className="relative mb-3">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          ref={searchRef}
-          type="text"
-          placeholder="Cari lokasi..."
-          className="w-full input-dark rounded-lg pl-9 pr-3 py-2.5 text-sm"
-        />
+      <div className="flex gap-2 mb-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Cari lokasi..."
+            className="w-full input-dark rounded-lg pl-9 pr-3 py-2.5 text-sm"
+          />
+        </div>
+        <button
+          onClick={handleLocateMe}
+          className="bg-secondary hover:bg-secondary/80 text-primary p-2.5 rounded-lg transition-colors flex items-center justify-center shrink-0 w-[42px]"
+          title="Lokasi Saat Ini"
+        >
+          <Crosshair className="w-5 h-5" />
+        </button>
       </div>
 
       <div ref={mapRef} className="w-full h-52 rounded-lg overflow-hidden border border-border" />

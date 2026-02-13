@@ -22,6 +22,7 @@ export interface ProSettings {
   overlayOpacity: number;
   use24hFormat: boolean;
   watermarkText: string;
+  mapType: 'satellite' | 'roadmap';
 }
 
 export interface GeoTagState {

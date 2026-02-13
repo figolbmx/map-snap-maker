@@ -17,9 +17,10 @@ const defaultDateTime: DateTimeData = {
 const defaultProSettings: ProSettings = {
   showLatLong: true,
   showFullAddress: true,
-  overlayOpacity: 100,
+  overlayOpacity: 70,
   use24hFormat: false,
   watermarkText: 'GPS Map Camera',
+  mapType: 'satellite',
 };
 
 export default function Index() {
