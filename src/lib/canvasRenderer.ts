@@ -60,19 +60,19 @@ async function drawOverlay(
 ) {
   const scale = Math.max(canvasW / 1080, isPreview ? 0.45 : 0.8);
 
-  // More generous margins so overlay doesn't hug edges
-  const margin = Math.round(36 * scale);
-  const padding = Math.round(16 * scale);
-  const miniMapSize = Math.round(180 * scale);
-  const gap = Math.round(10 * scale);
-  const borderRadius = Math.round(14 * scale);
-  const mapBorderRadius = Math.round(10 * scale);
+  // Tight margin - overlay sits close to bottom edge like reference
+  const margin = Math.round(14 * scale);
+  const padding = Math.round(12 * scale);
+  const miniMapSize = Math.round(160 * scale);
+  const gap = Math.round(6 * scale);
+  const borderRadius = Math.round(10 * scale);
+  const mapBorderRadius = Math.round(8 * scale);
 
-  // Title is significantly larger than body text (like reference)
-  const fontSizeTitle = Math.round(22 * scale);
-  const fontSizeBody = Math.round(12 * scale);
-  const fontSizeWatermark = Math.round(10 * scale);
-  const lineHeight = 1.5;
+  // Title large, body compact - matching reference proportions
+  const fontSizeTitle = Math.round(20 * scale);
+  const fontSizeBody = Math.round(11 * scale);
+  const fontSizeWatermark = Math.round(9 * scale);
+  const lineHeight = 1.35;
 
   // Build text lines
   const flag = getFlagEmoji(location.countryCode);
@@ -128,7 +128,7 @@ async function drawOverlay(
   }
 
   // Box height fits content with padding
-  const infoBoxHeight = Math.max(miniMapSize, totalTextHeight + padding * 2);
+  const infoBoxHeight = totalTextHeight + padding * 2;
 
   const overlayBottom = canvasH - margin;
 
@@ -164,9 +164,9 @@ async function drawOverlay(
     ctx.restore();
   }
 
-  // Mini map - left side, bottom aligned
+  // Mini map - left side, bottom aligned with info box
   const mmX = margin;
-  const mmY = overlayBottom - miniMapSize;
+  const mmY = overlayBottom - Math.max(miniMapSize, infoBoxHeight);
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale);
@@ -244,7 +244,7 @@ function loadStaticMap(lat: number, lng: number, size: number, scale: number): P
       return;
     }
 
-    const pixelSize = Math.max(Math.round(size / scale), 100);
+    const pixelSize = Math.max(Math.round(size), 200);
     const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=${pixelSize}x${pixelSize}&scale=2&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
