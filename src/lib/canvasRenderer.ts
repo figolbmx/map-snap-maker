@@ -17,11 +17,19 @@ export async function renderGeoTagImage(
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  ctx.drawImage(image, 0, 0);
+  // Calculate Auto-Crop
+  // Landscape: Enforce 4:3. If wider, crop sides.
+  // Portrait: Enforce 3:4. If taller, crop top/bottom.
+  const { sx, sy, sw, sh, dx, dy, dw, dh } = calculateCrop(image.naturalWidth, image.naturalHeight);
+
+  canvas.width = dw;
+  canvas.height = dh;
+  ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
 
   // Wait for font to load
+  const font = new FontFace('Rubik', 'url(/font/rubik_regular.ttf)');
+  await font.load();
+  document.fonts.add(font);
   await document.fonts.load('400 20px "Noto Color Emoji"');
 
 
@@ -42,15 +50,59 @@ export async function renderPreview(
   const ctx = canvas.getContext('2d')!;
 
   // Render at full resolution so overlay looks identical to download
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  ctx.drawImage(image, 0, 0);
+  const { sx, sy, sw, sh, dx, dy, dw, dh } = calculateCrop(image.naturalWidth, image.naturalHeight);
+
+  canvas.width = dw;
+  canvas.height = dh;
+  ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
 
   // Wait for font to load
+  const font = new FontFace('Rubik', 'url(/font/rubik_regular.ttf)');
+  await font.load();
+  document.fonts.add(font);
   await document.fonts.load('400 20px "Noto Color Emoji"');
 
 
-  await drawOverlay(ctx, image.naturalWidth, image.naturalHeight, location, dateTime, proSettings, false);
+  await drawOverlay(ctx, dw, dh, location, dateTime, proSettings, false);
+}
+
+function calculateCrop(srcW: number, srcH: number) {
+  const isLandscape = srcW >= srcH;
+  const targetRatio = isLandscape ? 4 / 3 : 3 / 4;
+  const srcRatio = srcW / srcH;
+
+  let sw = srcW;
+  let sh = srcH;
+  let sx = 0;
+  let sy = 0;
+
+  if (isLandscape) {
+    if (srcRatio > targetRatio) {
+      // Too wide, crop width (sides)
+      sw = srcH * targetRatio;
+      sx = (srcW - sw) / 2;
+    } else if (srcRatio < targetRatio) {
+      // Too tall (closer to square), crop height (top/bottom) to match 4:3
+      sh = srcW / targetRatio;
+      sy = (srcH - sh) / 2;
+    }
+  } else {
+    // Portrait
+    if (srcRatio < targetRatio) {
+      // Too tall, crop height (top/bottom)
+      sh = srcW / targetRatio;
+      sy = (srcH - sh) / 2;
+    } else if (srcRatio > targetRatio) {
+      // Too wide (closer to square), crop width (sides) to match 3:4
+      sw = srcH * targetRatio;
+      sx = (srcW - sw) / 2;
+    }
+  }
+
+  return {
+    sx, sy, sw, sh,
+    dx: 0, dy: 0, dw: sw, dh: sh
+  };
 }
 
 async function drawOverlay(
@@ -67,23 +119,24 @@ async function drawOverlay(
 
   const margin = Math.round(10 * scale);
   const padding = Math.round(16 * scale);
-  const miniMapSize = Math.round(180 * scale);
-  const gap = Math.round(10 * scale);
+
+  const gap = Math.round(15 * scale);
   const borderRadius = Math.round(16 * scale);
   const mapBorderRadius = Math.round(12 * scale);
 
-  const fontSizeTitle = Math.round(26 * scale);
-  const fontSizeBody = Math.round(18 * scale);
+  const fontSizeTitle = Math.round(35 * scale);
+  const fontSizeBody = Math.round(25 * scale);
   const fontSizeWatermark = Math.round(13 * scale);
-  const lineHeight = 1.5;
+  const lineHeight = 1.3;
 
   // Build text lines
+  const titleBodyGap = Math.round(-5 * scale); // Jarak tambahan antara Title dan Body
   // Build text lines
   // const flag = getFlagEmoji(location.countryCode); // Removed font-based flag
   const titleLine = `${location.district}, ${location.province}, ${location.country}`;
 
   const lines: { text: string; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [
-    { text: titleLine, fontSize: fontSizeTitle, bold: true, hasFlag: true },
+    { text: titleLine, fontSize: fontSizeTitle, bold: false, hasFlag: true },
   ];
 
   if (proSettings.showFullAddress) {
@@ -111,8 +164,8 @@ async function drawOverlay(
   let wmBadgeW = 0;
   let wmBadgeH = 0;
   const wmText = proSettings.watermarkText ? proSettings.watermarkText : 'GPS Map Camera';
-  // Prioritize Noto Color Emoji for colored flags
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  // Prioritize Rubik, then Noto Color Emoji for colored flags
+  ctx.font = `600 ${fontSizeWatermark}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
 
   // Icon dimensions
   const iconSize = Math.round(fontSizeWatermark * 1.5);
@@ -121,14 +174,27 @@ async function drawOverlay(
   wmBadgeW = iconSize + iconPadding + ctx.measureText(wmText).width + wmBadgePadH * 2;
   wmBadgeH = Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2;
 
-  // Calculate target height (22% of canvas)
-  const targetHeight = Math.round(canvasH * 0.22);
+  // Calculate target height
+  // Landscape: 23% of height
+  // Portrait: 23% of width
+  const isLandscape = canvasW >= canvasH;
+  const targetHeight = isLandscape
+    ? Math.round(canvasH * 0.25)
+    : Math.round(canvasW * 0.25);
   const infoBoxHeight = targetHeight;
+  const miniMapHeight = infoBoxHeight;
+  const miniMapWidth = infoBoxHeight * 1.06; // Change this multiplier to make it rectangular (e.g. infoBoxHeight * 1.5)
+  const miniMapSize = infoBoxHeight; // Kept for legacy ref if needed, but we use W/H now
   const maxTextHeight = infoBoxHeight - padding * 2;
 
-  // Initial max width constraint (82% of canvas minus map and padding)
-  const maxOverlayAllowed = Math.round(canvasW * 0.82);
-  const maxInfoBoxWidth = maxOverlayAllowed - miniMapSize - gap;
+  // Initial max width constraint
+  // Landscape: 95% of height
+  // Portrait: 95% of width
+
+  const maxOverlayAllowed = isLandscape
+    ? Math.round(canvasH * 1.09)
+    : Math.round(canvasW * 0.95);
+  const maxInfoBoxWidth = maxOverlayAllowed - miniMapWidth - gap;
   const maxTextContentWidth = maxInfoBoxWidth - padding * 2;
 
   // Measure text height and Width - with auto scaling
@@ -144,10 +210,11 @@ async function drawOverlay(
     wrappedTextData = [];
     totalTextHeight = 0;
     maxLineWidthFound = 0;
+    let forceShrink = false;
 
     for (const line of lines) {
       const scaledFontSize = Math.round(line.fontSize * currentScaleFactor);
-      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
 
       // Reserve space for flag if needed
       const flagSpace = line.hasFlag ? Math.round(scaledFontSize * 1.2) + Math.round(8 * scale) : 0;
@@ -160,10 +227,22 @@ async function drawOverlay(
         const w = ctx.measureText(wLine).width + (line.hasFlag ? flagSpace : 0); // Add flag space to width check
         if (w > maxLineWidthFound) maxLineWidthFound = w;
       }
+
+      // Special constraint: If title (hasFlag) wraps to > 2 lines, force shrink
+      // Or if title wraps to > 1 line and scale is still > 0.7 (try to keep 1 line if possible)
+      // Extend this logic to Body text as well: if any line wraps > 2 times, it's too much, shrink it.
+      if (wrapped.length > 2) forceShrink = true;
+
+      if (line.hasFlag) {
+        if (wrapped.length > 1 && currentScaleFactor > 0.8) forceShrink = true; // Stricter for title to be 1 line
+      } else {
+        // For body text (address, etc), if it wraps > 1 line and we are still at large scale, shrink a bit
+        if (wrapped.length > 1 && currentScaleFactor > 0.85) forceShrink = true;
+      }
     }
 
     // Check if it fits
-    if (totalTextHeight <= maxTextHeight || currentScaleFactor <= minScaleFactor) {
+    if ((totalTextHeight <= maxTextHeight && !forceShrink) || currentScaleFactor <= minScaleFactor) {
       break;
     }
 
@@ -182,7 +261,7 @@ async function drawOverlay(
 
   // Badge sits ABOVE the info box, top-right
   const badgeGap = 0;
-  const badgeX = overlayLeft + miniMapSize + gap + infoBoxWidth - wmBadgeW;
+  const badgeX = overlayLeft + miniMapWidth + gap + infoBoxWidth - wmBadgeW;
   const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
 
   const opacity = proSettings.overlayOpacity / 100;
@@ -193,7 +272,7 @@ async function drawOverlay(
   const badgeR = Math.round(6 * scale);
   roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, { tl: badgeR, tr: badgeR, br: 0, bl: 0 });
   ctx.fill();
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  ctx.font = `600 ${fontSizeWatermark}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
 
@@ -212,7 +291,7 @@ async function drawOverlay(
   ctx.restore();
 
   // Info Box
-  const infoBoxX = overlayLeft + miniMapSize + gap;
+  const infoBoxX = overlayLeft + miniMapWidth + gap;
   const infoBoxY = overlayBottom - infoBoxHeight;
 
   // Use base color only, alpha is handled by globalAlpha
@@ -227,23 +306,25 @@ async function drawOverlay(
 
   // Mini Map
   const mmX = overlayLeft;
-  const mmY = overlayBottom - miniMapSize;
+  const mmY = overlayBottom - miniMapHeight;
 
   try {
-    const mapImg = await loadStaticMap(location.lat, location.lng, miniMapSize, scale, proSettings.mapType);
-    ctx.save();
+    const mapImg = await loadStaticMap(location.lat, location.lng, miniMapWidth, miniMapHeight, scale, proSettings.mapType);
+    ctx.save();[246]
     // White background behind map
     ctx.fillStyle = '#ffffff';
-    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
+    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
     ctx.fill();
-    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
+    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
     ctx.clip();
     // Draw image slightly zoomed in to "crop" the Google logo at the bottom
     // We scale by 1.3x and shift it up slightly
     const zoomFactor = 1.5;
-    const size = miniMapSize * zoomFactor;
-    const offset = (size - miniMapSize) / 2;
-    ctx.drawImage(mapImg, mmX - offset, mmY - offset, size, size);
+    const sizeW = miniMapWidth * zoomFactor;
+    const sizeH = miniMapHeight * zoomFactor;
+    const offsetW = (sizeW - miniMapWidth) / 2;
+    const offsetH = (sizeH - miniMapHeight) / 2;
+    ctx.drawImage(mapImg, mmX - offsetW, mmY - offsetH, sizeW, sizeH);
 
     // Custom Google Logo
     ctx.save();
@@ -253,7 +334,7 @@ async function drawOverlay(
     ctx.textBaseline = 'bottom';
 
     const logoX = mmX + 8 * scale;
-    const logoY = mmY + miniMapSize - 6 * scale;
+    const logoY = mmY + miniMapHeight - 6 * scale;
 
     if (proSettings.mapType === 'satellite') {
       // Satellite: White text with shadow and black outline
@@ -292,18 +373,21 @@ async function drawOverlay(
   } catch {
     ctx.save();
     ctx.fillStyle = '#e8e4d8';
-    roundRect(ctx, mmX, mmY, miniMapSize, miniMapSize, mapBorderRadius);
+    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
     ctx.fill();
     ctx.fillStyle = '#999';
     ctx.font = `${Math.round(12 * scale)}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText('Map', mmX + miniMapSize / 2, mmY + miniMapSize / 2 + 4 * scale);
+    ctx.fillText('Map', mmX + miniMapWidth / 2, mmY + miniMapHeight / 2 + 4 * scale);
     ctx.restore();
   }
 
   // Draw text inside info box - vertically centered
   const textX = infoBoxX + padding;
-  const textBlockTop = infoBoxY + (infoBoxHeight - totalTextHeight) / 2;
+  // Previously purely centered: (infoBoxHeight - totalTextHeight) / 2
+  // Move it up slightly (e.g., subtract 10% of the space or a fixed amount) because it looks too low
+  const verticalSpace = infoBoxHeight - totalTextHeight;
+  const textBlockTop = infoBoxY + (verticalSpace / 2) - (verticalSpace * 0.2);
   let textY = textBlockTop + wrappedTextData[0]?.fontSize * 0.9;
 
   ctx.textAlign = 'left';
@@ -321,14 +405,14 @@ async function drawOverlay(
 
   for (let i = 0; i < wrappedTextData.length; i++) {
     const block = wrappedTextData[i];
-    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
 
     for (let j = 0; j < block.lines.length; j++) {
       const wLine = block.lines[j];
       ctx.fillText(wLine, textX, textY);
 
-      // Draw flag on the first line of the first block if it has a flag
-      if (block.hasFlag && j === 0 && flagImg) {
+      // Draw flag on the LAST line of the block if it has a flag
+      if (block.hasFlag && j === block.lines.length - 1 && flagImg) {
         const textWidth = ctx.measureText(wLine).width;
         // Make flag height proportional to font size
         const flagH = Math.round(block.fontSize * 1.3);
@@ -351,6 +435,11 @@ async function drawOverlay(
       }
 
       textY += block.fontSize * lineHeight;
+
+      // Add extra gap after the first block (Title)
+      if (i === 0 && j === block.lines.length - 1) {
+        textY += titleBodyGap;
+      }
     }
   }
 }
@@ -397,7 +486,7 @@ function roundRect(
   ctx.closePath();
 }
 
-function loadStaticMap(lat: number, lng: number, size: number, scale: number, mapType: 'satellite' | 'roadmap'): Promise<HTMLImageElement> {
+function loadStaticMap(lat: number, lng: number, width: number, height: number, scale: number, mapType: 'satellite' | 'roadmap'): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -405,8 +494,9 @@ function loadStaticMap(lat: number, lng: number, size: number, scale: number, ma
       return;
     }
 
-    const pixelSize = Math.max(Math.round(size / scale), 100);
-    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelSize}x${pixelSize}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
+    const pixelW = Math.max(Math.round(width / scale), 100);
+    const pixelH = Math.max(Math.round(height / scale), 100);
+    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelW}x${pixelH}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
