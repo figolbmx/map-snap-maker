@@ -1,5 +1,6 @@
 import { Settings, Eye, EyeOff, Type } from 'lucide-react';
 import type { ProSettings as ProSettingsType } from '@/types/geotag';
+import { defaultLayoutSettings } from '@/types/geotag';
 
 interface ProSettingsProps {
   settings: ProSettingsType;
@@ -7,6 +8,15 @@ interface ProSettingsProps {
 }
 
 export default function ProSettingsPanel({ settings, onChange }: ProSettingsProps) {
+  const ls = settings.layoutSettings || defaultLayoutSettings;
+
+  const updateFontSize = (key: keyof typeof defaultLayoutSettings, value: number) => {
+    onChange({
+      ...settings,
+      layoutSettings: { ...ls, [key]: value },
+    });
+  };
+
   return (
     <div className="card-elevated p-4 animate-fade-in">
       <h3 className="section-title flex items-center gap-2">
@@ -70,6 +80,61 @@ export default function ProSettingsPanel({ settings, onChange }: ProSettingsProp
             >
               Normal
             </button>
+          </div>
+        </div>
+
+        {/* Font Size Controls */}
+        <div className="pt-2 border-t border-border">
+          <label className="text-sm text-foreground flex items-center gap-1.5 mb-3">
+            <Type className="w-3.5 h-3.5 text-primary" />
+            Ukuran Teks
+          </label>
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Judul</span>
+                <span className="text-xs text-primary font-mono">{ls.fontSizeTitle}px</span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={80}
+                value={ls.fontSizeTitle}
+                onChange={(e) => updateFontSize('fontSizeTitle', parseInt(e.target.value))}
+                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Body</span>
+                <span className="text-xs text-primary font-mono">{ls.fontSizeBody}px</span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={60}
+                value={ls.fontSizeBody}
+                onChange={(e) => updateFontSize('fontSizeBody', parseInt(e.target.value))}
+                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Watermark</span>
+                <span className="text-xs text-primary font-mono">{ls.fontSizeWatermark}px</span>
+              </div>
+              <input
+                type="range"
+                min={8}
+                max={30}
+                value={ls.fontSizeWatermark}
+                onChange={(e) => updateFontSize('fontSizeWatermark', parseInt(e.target.value))}
+                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
+              />
+            </div>
           </div>
         </div>
       </div>
