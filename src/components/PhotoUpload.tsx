@@ -62,11 +62,10 @@ export default function PhotoUpload({ onImageLoad, imageUrl, onClear }: PhotoUpl
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
-            isDragging
+          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${isDragging
               ? 'border-primary bg-primary/5'
               : 'border-border hover:border-primary/50 hover:bg-secondary/50'
-          }`}
+            }`}
         >
           <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
           <p className="text-sm text-foreground font-medium">Klik atau drag foto ke sini</p>
@@ -77,7 +76,7 @@ export default function PhotoUpload({ onImageLoad, imageUrl, onClear }: PhotoUpl
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png"
+        accept="image/*"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

@@ -116,18 +116,25 @@ async function drawOverlay(
 ) {
   console.log('Using updated renderer v2 - with local flags');
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
+  const isLandscape = canvasW >= canvasH;
 
-  const margin = Math.round(10 * scale);
+  const margin = isLandscape
+    ? Math.round(15 * scale)
+    : Math.round(20 * scale);
   const padding = Math.round(16 * scale);
 
   const gap = Math.round(15 * scale);
   const borderRadius = Math.round(16 * scale);
   const mapBorderRadius = Math.round(12 * scale);
 
-  const fontSizeTitle = Math.round(35 * scale);
-  const fontSizeBody = Math.round(25 * scale);
-  const fontSizeWatermark = Math.round(13 * scale);
-  const lineHeight = 1.3;
+
+  const ls = proSettings.layoutSettings;
+  const fontSizeTitle = Math.round(20 * scale);
+  const fontSizeBody = Math.round(15 * scale);
+  const fontSizeWatermark = isLandscape
+    ? Math.round(12.8 * scale)
+    : Math.round(16 * scale);
+  const lineHeight = 1.2;
 
   // Build text lines
   const titleBodyGap = Math.round(-5 * scale); // Jarak tambahan antara Title dan Body
@@ -157,55 +164,56 @@ async function drawOverlay(
     bold: false,
   });
 
-  // ... (watermark badge calculation remains similar) ...
   // Watermark badge dimensions
-  const wmBadgePadH = Math.round(10 * scale);
-  const wmBadgePadV = Math.round(6 * scale);
+  // Calculate orientation and target height
+  const targetHeight = isLandscape
+    ? Math.round(canvasH * 0.248)
+    : Math.round(canvasW * 0.245);
+  const infoBoxHeight = targetHeight;
+
+  // Watermark badge dimensions
+  const wmBadgePadH = isLandscape
+    ? Math.round(12 * scale)
+    : Math.round(12 * scale);
+  const wmBadgePadV = isLandscape
+    ? Math.round(7 * scale)
+    : Math.round(8 * scale);
   let wmBadgeW = 0;
   let wmBadgeH = 0;
   const wmText = proSettings.watermarkText ? proSettings.watermarkText : 'GPS Map Camera';
   // Prioritize Rubik, then Noto Color Emoji for colored flags
-  ctx.font = `600 ${fontSizeWatermark}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", sans-serif`;
 
   // Icon dimensions
-  const iconSize = Math.round(fontSizeWatermark * 1.5);
-  const iconPadding = Math.round(4 * scale);
+  const iconSize = isLandscape
+    ? Math.round(fontSizeWatermark * 1.8)
+    : Math.round(fontSizeWatermark * 2.3);
+  const iconPadding = isLandscape
+    ? Math.round(5.5 * scale)
+    : Math.round(10 * scale);
 
   wmBadgeW = iconSize + iconPadding + ctx.measureText(wmText).width + wmBadgePadH * 2;
   wmBadgeH = Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2;
 
-  // Calculate target height
-  // Landscape: 23% of height
-  // Portrait: 23% of width
-  const isLandscape = canvasW >= canvasH;
-  const targetHeight = isLandscape
-    ? Math.round(canvasH * 0.25)
-    : Math.round(canvasW * 0.25);
-  const infoBoxHeight = targetHeight;
   const miniMapHeight = infoBoxHeight;
-  const miniMapWidth = infoBoxHeight * 1.06; // Change this multiplier to make it rectangular (e.g. infoBoxHeight * 1.5)
-  const miniMapSize = infoBoxHeight; // Kept for legacy ref if needed, but we use W/H now
+  const miniMapWidth = infoBoxHeight * 1.06;
   const maxTextHeight = infoBoxHeight - padding * 2;
 
   // Initial max width constraint
-  // Landscape: 95% of height
-  // Portrait: 95% of width
-
   const maxOverlayAllowed = isLandscape
     ? Math.round(canvasH * 1.09)
-    : Math.round(canvasW * 0.95);
+    : Math.round(canvasW * 0.935);
   const maxInfoBoxWidth = maxOverlayAllowed - miniMapWidth - gap;
   const maxTextContentWidth = maxInfoBoxWidth - padding * 2;
 
-  // Measure text height and Width - with auto scaling
+  // Measure text height and Width - with auto scaling (both UP and DOWN)
   let totalTextHeight = 0;
   let maxLineWidthFound = 0;
-  let currentScaleFactor = 1.0;
+  let currentScaleFactor = 2.5; // Start high to allow text to grow significantly
   const minScaleFactor = 0.5; // Don't shrink below 50%
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let wrappedTextData: { lines: string[]; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [];
 
-  // Loop to find best fit
+  // Loop: start big, shrink by small steps until text fits the box
   while (true) {
     wrappedTextData = [];
     totalTextHeight = 0;
@@ -214,40 +222,40 @@ async function drawOverlay(
 
     for (const line of lines) {
       const scaledFontSize = Math.round(line.fontSize * currentScaleFactor);
-      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Roboto", sans-serif`;
 
       // Reserve space for flag if needed
       const flagSpace = line.hasFlag ? Math.round(scaledFontSize * 1.2) + Math.round(8 * scale) : 0;
 
       const wrapped = wrapText(ctx, line.text, maxTextContentWidth - flagSpace);
       wrappedTextData.push({ lines: wrapped, fontSize: scaledFontSize, bold: line.bold, hasFlag: line.hasFlag });
+
+      // Calculate height for this line
       totalTextHeight += wrapped.length * scaledFontSize * lineHeight;
 
       for (const wLine of wrapped) {
-        const w = ctx.measureText(wLine).width + (line.hasFlag ? flagSpace : 0); // Add flag space to width check
+        const w = ctx.measureText(wLine).width + (line.hasFlag ? flagSpace : 0);
         if (w > maxLineWidthFound) maxLineWidthFound = w;
       }
 
-      // Special constraint: If title (hasFlag) wraps to > 2 lines, force shrink
-      // Or if title wraps to > 1 line and scale is still > 0.7 (try to keep 1 line if possible)
-      // Extend this logic to Body text as well: if any line wraps > 2 times, it's too much, shrink it.
-      if (wrapped.length > 2) forceShrink = true;
+      // Constraints to prevent excessive wrapping:
+      // Allow up to 3 lines per block if scaling is still high
+      if (wrapped.length > 3) forceShrink = true;
 
-      if (line.hasFlag) {
-        if (wrapped.length > 1 && currentScaleFactor > 0.8) forceShrink = true; // Stricter for title to be 1 line
-      } else {
-        // For body text (address, etc), if it wraps > 1 line and we are still at large scale, shrink a bit
-        if (wrapped.length > 1 && currentScaleFactor > 0.85) forceShrink = true;
-      }
+      // Special handling for title: try to keep on 1 or 2 lines
+      if (line.hasFlag && wrapped.length > 2) forceShrink = true;
     }
 
-    // Check if it fits
+    // Include the titleBodyGap in total height calculation
+    totalTextHeight += titleBodyGap;
+
+    // Check if it fits within the box height
     if ((totalTextHeight <= maxTextHeight && !forceShrink) || currentScaleFactor <= minScaleFactor) {
       break;
     }
 
-    // Reduce scale and try again
-    currentScaleFactor -= 0.05;
+    // Reduce scale by a very small step for extreme precision
+    currentScaleFactor -= 0.01;
   }
 
   // Calculate dynamic widths based on content
@@ -269,10 +277,10 @@ async function drawOverlay(
   // Draw badge (separate small dark box above info box)
   ctx.save();
   ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
-  const badgeR = Math.round(6 * scale);
+  const badgeR = Math.round(10 * scale);
   roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, { tl: badgeR, tr: badgeR, br: 0, bl: 0 });
   ctx.fill();
-  ctx.font = `600 ${fontSizeWatermark}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  ctx.font = `600 ${fontSizeWatermark}px "Roboto", sans-serif`;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
 
@@ -329,7 +337,7 @@ async function drawOverlay(
     // Custom Google Logo
     ctx.save();
     const logoFontSize = Math.round(30 * scale);
-    ctx.font = `500 ${logoFontSize}px "Product Sans", "Roboto", "Arial", sans-serif`;
+    ctx.font = `500 ${logoFontSize}px "Roboto", sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
 
@@ -384,10 +392,8 @@ async function drawOverlay(
 
   // Draw text inside info box - vertically centered
   const textX = infoBoxX + padding;
-  // Previously purely centered: (infoBoxHeight - totalTextHeight) / 2
-  // Move it up slightly (e.g., subtract 10% of the space or a fixed amount) because it looks too low
   const verticalSpace = infoBoxHeight - totalTextHeight;
-  const textBlockTop = infoBoxY + (verticalSpace / 2) - (verticalSpace * 0.2);
+  const textBlockTop = infoBoxY + verticalSpace / 2;
   let textY = textBlockTop + wrappedTextData[0]?.fontSize * 0.9;
 
   ctx.textAlign = 'left';
@@ -405,7 +411,7 @@ async function drawOverlay(
 
   for (let i = 0; i < wrappedTextData.length; i++) {
     const block = wrappedTextData[i];
-    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Rubik", "Roboto", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Roboto", sans-serif`;
 
     for (let j = 0; j < block.lines.length; j++) {
       const wLine = block.lines[j];
@@ -414,23 +420,16 @@ async function drawOverlay(
       // Draw flag on the LAST line of the block if it has a flag
       if (block.hasFlag && j === block.lines.length - 1 && flagImg) {
         const textWidth = ctx.measureText(wLine).width;
-        // Make flag height proportional to font size
         const flagH = Math.round(block.fontSize * 1.3);
-        const flagW = Math.round(flagH * 1.2); // Standard 3:2 aspect ratio
+        const flagW = Math.round(flagH * 1.2);
 
-        // Vertically center relative to cap height (approx 0.7em)
-        // Center of Cap Height is at (textY - 0.35 * fontSize)
-        // Flag Top = Center - flagH / 2
-        // flagY = (textY - 0.35 * fontSize) - (flagH / 2)
-        const flagY = textY - Math.round(block.fontSize * 0.35) - Math.round(flagH / 2);
-
+        const flagYPos = textY - Math.round(block.fontSize * 0.35) - Math.round(flagH / 2);
         const flagX = textX + textWidth + Math.round(10 * scale);
 
         ctx.save();
-        // Add a small shadow/outline to flag
         ctx.shadowColor = 'rgba(0,0,0,0.3)';
         ctx.shadowBlur = 2;
-        ctx.drawImage(flagImg, flagX, flagY, flagW, flagH);
+        ctx.drawImage(flagImg, flagX, flagYPos, flagW, flagH);
         ctx.restore();
       }
 

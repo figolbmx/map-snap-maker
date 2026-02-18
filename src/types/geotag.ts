@@ -16,6 +16,18 @@ export interface DateTimeData {
   use24h: boolean;
 }
 
+export interface LayoutSettings {
+  fontSizeTitle: number;
+  fontSizeBody: number;
+  fontSizeWatermark: number;
+}
+
+export const defaultLayoutSettings: LayoutSettings = {
+  fontSizeTitle: 35,
+  fontSizeBody: 25,
+  fontSizeWatermark: 13,
+};
+
 export interface ProSettings {
   showLatLong: boolean;
   showFullAddress: boolean;
@@ -23,6 +35,7 @@ export interface ProSettings {
   use24hFormat: boolean;
   watermarkText: string;
   mapType: 'satellite' | 'roadmap';
+  layoutSettings?: LayoutSettings;
 }
 
 export interface GeoTagState {

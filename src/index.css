@@ -92,6 +92,17 @@
     @apply bg-card rounded-xl border border-border;
   }
 
+  .map-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: hsl(var(--background) / 0.95) !important;
+    backdrop-filter: blur(8px);
+  }
+
   .section-title {
     @apply text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3;
   }

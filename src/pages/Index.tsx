@@ -6,6 +6,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import ProSettingsPanel from '@/components/ProSettingsPanel';
 import PreviewCanvas from '@/components/PreviewCanvas';
 import type { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
+import { defaultLayoutSettings } from '@/types/geotag';
 
 const defaultDateTime: DateTimeData = {
   date: new Date(),
@@ -21,6 +22,7 @@ const defaultProSettings: ProSettings = {
   use24hFormat: false,
   watermarkText: 'GPS Map Camera',
   mapType: 'satellite',
+  layoutSettings: defaultLayoutSettings,
 };
 
 export default function Index() {
