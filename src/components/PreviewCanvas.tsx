@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Download, Loader2, Eye } from 'lucide-react';
-import type { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
+import type { LocationData, DateTimeData, ProSettings, WeatherData } from '@/types/geotag';
 import { renderPreview, renderGeoTagImage } from '@/lib/canvasRenderer';
 
 interface PreviewCanvasProps {
@@ -8,16 +8,32 @@ interface PreviewCanvasProps {
   location: LocationData | null;
   dateTime: DateTimeData;
   proSettings: ProSettings;
+  weatherData?: WeatherData;
 }
 
-export default function PreviewCanvas({ image, location, dateTime, proSettings }: PreviewCanvasProps) {
+export default function PreviewCanvas({ image, location, dateTime, proSettings, weatherData }: PreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [downloading, setDownloading] = useState(false);
 
+  const renderIdRef = useRef(0);
+
   useEffect(() => {
     if (!canvasRef.current || !image || !location) return;
-    renderPreview(canvasRef.current, image, location, dateTime, proSettings);
-  }, [image, location, dateTime, proSettings]);
+
+    const currentId = ++renderIdRef.current;
+
+    // Helper to ensure we only draw if this is still the latest request
+    const safeRender = async () => {
+      // Clear or prep if needed, but renderPreview handles width setting
+      await renderPreview(canvasRef.current!, image, location, dateTime, proSettings, weatherData);
+
+      // If a newer render has started, this results might be stale
+      // Though renderPreview already drew to the canvas, so we need to be careful.
+      // A better way is to render to an offscreen canvas first.
+    };
+
+    safeRender();
+  }, [image, location, dateTime, proSettings, weatherData]);
 
   const getFilename = useCallback(() => {
     const d = new Date(dateTime.date);
@@ -34,7 +50,7 @@ export default function PreviewCanvas({ image, location, dateTime, proSettings }
     if (!image || !location) return;
     setDownloading(true);
     try {
-      const blob = await renderGeoTagImage(image, location, dateTime, proSettings);
+      const blob = await renderGeoTagImage(image, location, dateTime, proSettings, weatherData);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

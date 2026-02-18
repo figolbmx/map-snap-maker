@@ -16,6 +16,14 @@ export interface DateTimeData {
   use24h: boolean;
 }
 
+export interface WeatherData {
+  temperatureC: number;
+  temperatureF: number;
+  weatherCode: number;
+  description: string;
+  iconUrl: string;
+}
+
 export interface LayoutSettings {
   fontSizeTitle: number;
   fontSizeBody: number;

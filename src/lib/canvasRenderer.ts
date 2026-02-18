@@ -1,39 +1,34 @@
-import { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
+import { LocationData, DateTimeData, ProSettings, WeatherData } from '@/types/geotag';
 import { getApiKey } from '@/lib/googleMaps';
 import { formatDateTime } from '@/lib/dateUtils';
 
 /**
- * Layout: Bottom of image
- * [Mini Map (no dark bg)] [Dark info box with text + watermark]
- * Map sits to the left, dark rounded box to the right.
+ * Layout: Bottom of image — full-width bar
+ * [Mini Map] [Address + Date/Time] [Weather Icon + Temps]
+ * Background: 70% transparent gray
  */
 
 export async function renderGeoTagImage(
   image: HTMLImageElement,
   location: LocationData,
   dateTime: DateTimeData,
-  proSettings: ProSettings
+  proSettings: ProSettings,
+  weatherData?: WeatherData
 ): Promise<Blob> {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
-  // Calculate Auto-Crop
-  // Landscape: Enforce 4:3. If wider, crop sides.
-  // Portrait: Enforce 3:4. If taller, crop top/bottom.
   const { sx, sy, sw, sh, dx, dy, dw, dh } = calculateCrop(image.naturalWidth, image.naturalHeight);
 
   canvas.width = dw;
   canvas.height = dh;
   ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
 
-  // Wait for font to load
   const font = new FontFace('Rubik', 'url(/font/rubik_regular.ttf)');
   await font.load();
   document.fonts.add(font);
-  await document.fonts.load('400 20px "Noto Color Emoji"');
 
-
-  await drawOverlay(ctx, canvas.width, canvas.height, location, dateTime, proSettings, false);
+  await drawOverlay(ctx, canvas.width, canvas.height, location, dateTime, proSettings, false, weatherData);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.9);
@@ -45,25 +40,34 @@ export async function renderPreview(
   image: HTMLImageElement,
   location: LocationData,
   dateTime: DateTimeData,
-  proSettings: ProSettings
+  proSettings: ProSettings,
+  weatherData?: WeatherData
 ): Promise<void> {
-  const ctx = canvas.getContext('2d')!;
-
-  // Render at full resolution so overlay looks identical to download
   const { sx, sy, sw, sh, dx, dy, dw, dh } = calculateCrop(image.naturalWidth, image.naturalHeight);
 
-  canvas.width = dw;
-  canvas.height = dh;
-  ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+  // Create an offscreen canvas to prevent flickering/piling up
+  const offscreen = document.createElement('canvas');
+  offscreen.width = dw;
+  offscreen.height = dh;
+  const oCtx = offscreen.getContext('2d')!;
 
-  // Wait for font to load
+  // 1. Draw base image
+  oCtx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+
+  // 2. Load and add font
   const font = new FontFace('Rubik', 'url(/font/rubik_regular.ttf)');
   await font.load();
   document.fonts.add(font);
-  await document.fonts.load('400 20px "Noto Color Emoji"');
 
+  // 3. Draw overlay on offscreen canvas
+  await drawOverlay(oCtx, dw, dh, location, dateTime, proSettings, false, weatherData);
 
-  await drawOverlay(ctx, dw, dh, location, dateTime, proSettings, false);
+  // 4. Finally, copy offscreen to the main canvas in one go
+  // This ensures no semi-transparent stacking if multiple draws overlap
+  const ctx = canvas.getContext('2d')!;
+  canvas.width = dw;
+  canvas.height = dh;
+  ctx.drawImage(offscreen, 0, 0);
 }
 
 function calculateCrop(srcW: number, srcH: number) {
@@ -78,22 +82,17 @@ function calculateCrop(srcW: number, srcH: number) {
 
   if (isLandscape) {
     if (srcRatio > targetRatio) {
-      // Too wide, crop width (sides)
       sw = srcH * targetRatio;
       sx = (srcW - sw) / 2;
     } else if (srcRatio < targetRatio) {
-      // Too tall (closer to square), crop height (top/bottom) to match 4:3
       sh = srcW / targetRatio;
       sy = (srcH - sh) / 2;
     }
   } else {
-    // Portrait
     if (srcRatio < targetRatio) {
-      // Too tall, crop height (top/bottom)
       sh = srcW / targetRatio;
       sy = (srcH - sh) / 2;
     } else if (srcRatio > targetRatio) {
-      // Too wide (closer to square), crop width (sides) to match 3:4
       sw = srcH * targetRatio;
       sx = (srcW - sw) / 2;
     }
@@ -112,261 +111,84 @@ async function drawOverlay(
   location: LocationData,
   dateTime: DateTimeData,
   proSettings: ProSettings,
-  isPreview: boolean
+  isPreview: boolean,
+  weatherData?: WeatherData
 ) {
-  console.log('Using updated renderer v2 - with local flags');
   const scale = Math.max(canvasW / 1080, isPreview ? 0.5 : 0.8);
   const isLandscape = canvasW >= canvasH;
 
-  const margin = isLandscape
-    ? Math.round(15 * scale)
-    : Math.round(20 * scale);
-  const padding = Math.round(16 * scale);
-
-  const gap = Math.round(15 * scale);
-  const borderRadius = Math.round(16 * scale);
-  const mapBorderRadius = Math.round(12 * scale);
-
-
-  const ls = proSettings.layoutSettings;
-  const fontSizeTitle = Math.round(20 * scale);
-  const fontSizeBody = Math.round(15 * scale);
-  const fontSizeWatermark = isLandscape
-    ? Math.round(12.8 * scale)
-    : Math.round(16 * scale);
-  const lineHeight = 1.2;
-
-  // Build text lines
-  const titleBodyGap = Math.round(-5 * scale); // Jarak tambahan antara Title dan Body
-  // Build text lines
-  // const flag = getFlagEmoji(location.countryCode); // Removed font-based flag
-  const titleLine = `${location.district}, ${location.province}, ${location.country}`;
-
-  const lines: { text: string; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [
-    { text: titleLine, fontSize: fontSizeTitle, bold: false, hasFlag: true },
-  ];
-
-  if (proSettings.showFullAddress) {
-    lines.push({ text: location.fullAddress, fontSize: fontSizeBody, bold: false });
-  }
-
-  if (proSettings.showLatLong) {
-    lines.push({
-      text: `Lat ${location.lat.toFixed(6)}° Long ${location.lng.toFixed(6)}°`,
-      fontSize: fontSizeBody,
-      bold: false,
-    });
-  }
-
-  lines.push({
-    text: formatDateTime(dateTime.date, dateTime.timezoneOffset, proSettings.use24hFormat),
-    fontSize: fontSizeBody,
-    bold: false,
-  });
-
-  // Watermark badge dimensions
-  // Calculate orientation and target height
-  const targetHeight = isLandscape
-    ? Math.round(canvasH * 0.248)
+  // ── Dimensions ──
+  const overlayHeight = isLandscape
+    ? Math.round(canvasH * 0.33)
     : Math.round(canvasW * 0.245);
-  const infoBoxHeight = targetHeight;
+  const padding = Math.round(16 * scale);
+  const gap = Math.round(10 * scale);
 
-  // Watermark badge dimensions
-  const wmBadgePadH = isLandscape
-    ? Math.round(12 * scale)
-    : Math.round(12 * scale);
-  const wmBadgePadV = isLandscape
-    ? Math.round(7 * scale)
-    : Math.round(8 * scale);
-  let wmBadgeW = 0;
-  let wmBadgeH = 0;
-  const wmText = proSettings.watermarkText ? proSettings.watermarkText : 'GPS Map Camera';
-  // Prioritize Rubik, then Noto Color Emoji for colored flags
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", sans-serif`;
+  // Overlay spans full width, flush to edges and bottom
+  const overlayWidth = canvasW;
+  const overlayLeft = 0;
+  const overlayTop = canvasH - overlayHeight;
 
-  // Icon dimensions
-  const iconSize = isLandscape
-    ? Math.round(fontSizeWatermark * 1.8)
-    : Math.round(fontSizeWatermark * 2.3);
-  const iconPadding = isLandscape
-    ? Math.round(5.5 * scale)
-    : Math.round(10 * scale);
+  // ── Column widths ──
+  const miniMapWidth = Math.round(overlayHeight * 1.01);
+  const miniMapHeight = overlayHeight;
+  const weatherColWidth = weatherData ? Math.round(overlayWidth * 0.1) : 0;
+  const centerColWidth = overlayWidth - miniMapWidth - weatherColWidth - gap * (weatherData ? 2 : 1);
 
-  wmBadgeW = iconSize + iconPadding + ctx.measureText(wmText).width + wmBadgePadH * 2;
-  wmBadgeH = Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2;
-
-  const miniMapHeight = infoBoxHeight;
-  const miniMapWidth = infoBoxHeight * 1.06;
-  const maxTextHeight = infoBoxHeight - padding * 2;
-
-  // Initial max width constraint
-  const maxOverlayAllowed = isLandscape
-    ? Math.round(canvasH * 1.09)
-    : Math.round(canvasW * 0.935);
-  const maxInfoBoxWidth = maxOverlayAllowed - miniMapWidth - gap;
-  const maxTextContentWidth = maxInfoBoxWidth - padding * 2;
-
-  // Measure text height and Width - with auto scaling (both UP and DOWN)
-  let totalTextHeight = 0;
-  let maxLineWidthFound = 0;
-  let currentScaleFactor = 2.5; // Start high to allow text to grow significantly
-  const minScaleFactor = 0.5; // Don't shrink below 50%
-  let wrappedTextData: { lines: string[]; fontSize: number; bold: boolean; hasFlag?: boolean }[] = [];
-
-  // Loop: start big, shrink by small steps until text fits the box
-  while (true) {
-    wrappedTextData = [];
-    totalTextHeight = 0;
-    maxLineWidthFound = 0;
-    let forceShrink = false;
-
-    for (const line of lines) {
-      const scaledFontSize = Math.round(line.fontSize * currentScaleFactor);
-      ctx.font = `${line.bold ? '700' : '400'} ${scaledFontSize}px "Roboto", sans-serif`;
-
-      // Reserve space for flag if needed
-      const flagSpace = line.hasFlag ? Math.round(scaledFontSize * 1.2) + Math.round(8 * scale) : 0;
-
-      const wrapped = wrapText(ctx, line.text, maxTextContentWidth - flagSpace);
-      wrappedTextData.push({ lines: wrapped, fontSize: scaledFontSize, bold: line.bold, hasFlag: line.hasFlag });
-
-      // Calculate height for this line
-      totalTextHeight += wrapped.length * scaledFontSize * lineHeight;
-
-      for (const wLine of wrapped) {
-        const w = ctx.measureText(wLine).width + (line.hasFlag ? flagSpace : 0);
-        if (w > maxLineWidthFound) maxLineWidthFound = w;
-      }
-
-      // Constraints to prevent excessive wrapping:
-      // Allow up to 3 lines per block if scaling is still high
-      if (wrapped.length > 3) forceShrink = true;
-
-      // Special handling for title: try to keep on 1 or 2 lines
-      if (line.hasFlag && wrapped.length > 2) forceShrink = true;
-    }
-
-    // Include the titleBodyGap in total height calculation
-    totalTextHeight += titleBodyGap;
-
-    // Check if it fits within the box height
-    if ((totalTextHeight <= maxTextHeight && !forceShrink) || currentScaleFactor <= minScaleFactor) {
-      break;
-    }
-
-    // Reduce scale by a very small step for extreme precision
-    currentScaleFactor -= 0.01;
-  }
-
-  // Calculate dynamic widths based on content
-  // const contentWidth = maxTextContentWidth; // Force use full width
-  const infoBoxWidth = maxInfoBoxWidth;
-  const overlayWidth = maxOverlayAllowed;
-
-  // Position: bottom-center of image
-  const overlayLeft = Math.round((canvasW - overlayWidth) / 2);
-  const overlayBottom = canvasH - margin;
-
-  // Badge sits ABOVE the info box, top-right
-  const badgeGap = 0;
-  const badgeX = overlayLeft + miniMapWidth + gap + infoBoxWidth - wmBadgeW;
-  const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
-
-  const opacity = proSettings.overlayOpacity / 100;
-
-  // Draw badge (separate small dark box above info box)
+  // ── Background: 70% transparent gray, no rounded corners ──
   ctx.save();
-  ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
-  const badgeR = Math.round(10 * scale);
-  roundRect(ctx, badgeX, badgeY, wmBadgeW, wmBadgeH, { tl: badgeR, tr: badgeR, br: 0, bl: 0 });
-  ctx.fill();
-  ctx.font = `600 ${fontSizeWatermark}px "Roboto", sans-serif`;
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left';
-
-  // Draw Icon
-  try {
-    const iconImg = await loadBadgeIcon();
-    ctx.drawImage(iconImg, badgeX + wmBadgePadH, badgeY + (wmBadgeH - iconSize) / 2, iconSize, iconSize);
-  } catch (e) {
-    // Fallback if icon fails
-    console.error('Failed to load icon', e);
-  }
-
-  // Draw Text
-  ctx.textBaseline = 'middle';
-  ctx.fillText(wmText, badgeX + wmBadgePadH + iconSize + iconPadding, badgeY + wmBadgeH / 2);
+  ctx.fillStyle = 'rgba(128, 128, 128, 0.7)';
+  ctx.fillRect(overlayLeft, overlayTop, overlayWidth, overlayHeight);
   ctx.restore();
 
-  // Info Box
-  const infoBoxX = overlayLeft + miniMapWidth + gap;
-  const infoBoxY = overlayBottom - infoBoxHeight;
-
-  // Use base color only, alpha is handled by globalAlpha
-  ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
-  roundRect(ctx, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, {
-    tl: borderRadius,
-    tr: 0,
-    br: borderRadius,
-    bl: borderRadius,
-  });
-  ctx.fill();
-
-  // Mini Map
+  // ════════════════════════════════════════════════
+  // COLUMN 1 — Mini Map (left)
+  // ════════════════════════════════════════════════
   const mmX = overlayLeft;
-  const mmY = overlayBottom - miniMapHeight;
+  const mmY = overlayTop;
+  const mapBorderRadius = 0;
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapWidth, miniMapHeight, scale, proSettings.mapType);
-    ctx.save();[246]
-    // White background behind map
+    ctx.save();
     ctx.fillStyle = '#ffffff';
-    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
-    ctx.fill();
-    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
+    ctx.fillRect(mmX, mmY, miniMapWidth, miniMapHeight);
+    ctx.beginPath();
+    ctx.rect(mmX, mmY, miniMapWidth, miniMapHeight);
     ctx.clip();
-    // Draw image slightly zoomed in to "crop" the Google logo at the bottom
-    // We scale by 1.3x and shift it up slightly
-    const zoomFactor = 1.5;
+
+    // Zoom slightly to hide "Terms of Use" and "Map Data" at the edges
+    const zoomFactor = 1.15;
     const sizeW = miniMapWidth * zoomFactor;
     const sizeH = miniMapHeight * zoomFactor;
     const offsetW = (sizeW - miniMapWidth) / 2;
     const offsetH = (sizeH - miniMapHeight) / 2;
     ctx.drawImage(mapImg, mmX - offsetW, mmY - offsetH, sizeW, sizeH);
 
-    // Custom Google Logo
-    ctx.save();
-    const logoFontSize = Math.round(30 * scale);
+    // Custom Google logo (since original is cropped)
+    const logoFontSize = Math.round(10 * scale);
     ctx.font = `500 ${logoFontSize}px "Roboto", sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-
     const logoX = mmX + 8 * scale;
     const logoY = mmY + miniMapHeight - 6 * scale;
 
     if (proSettings.mapType === 'satellite') {
-      // Satellite: White text with shadow and black outline
       ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
       ctx.shadowBlur = 4 * scale;
-
       ctx.lineWidth = 3 * scale;
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.lineJoin = 'round';
       ctx.strokeText('Google', logoX, logoY);
-
       ctx.fillStyle = '#ffffff';
       ctx.fillText('Google', logoX, logoY);
     } else {
-      // Roadmap: Multi-colored Google logo
       const colors = ['#4285F4', '#EA4335', '#FBBC05', '#4285F4', '#34A853', '#EA4335'];
-      const text = "Google";
+      const text = 'Google';
       let currentX = logoX;
-
-      // Add a subtle white outline for better contrast
       ctx.lineWidth = 2 * scale;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.lineJoin = 'round';
-
       for (let i = 0; i < text.length; i++) {
         ctx.strokeText(text[i], currentX, logoY);
         ctx.fillStyle = colors[i];
@@ -375,13 +197,12 @@ async function drawOverlay(
       }
     }
     ctx.restore();
-    ctx.restore();
-
-    ctx.restore();
   } catch {
     ctx.save();
     ctx.fillStyle = '#e8e4d8';
-    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);
+    roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, {
+      tl: mapBorderRadius, tr: 0, br: 0, bl: mapBorderRadius,
+    });
     ctx.fill();
     ctx.fillStyle = '#999';
     ctx.font = `${Math.round(12 * scale)}px sans-serif`;
@@ -390,56 +211,155 @@ async function drawOverlay(
     ctx.restore();
   }
 
-  // Draw text inside info box - vertically centered
-  const textX = infoBoxX + padding;
-  const verticalSpace = infoBoxHeight - totalTextHeight;
-  const textBlockTop = infoBoxY + verticalSpace / 2;
-  let textY = textBlockTop + wrappedTextData[0]?.fontSize * 0.9;
+  // ════════════════════════════════════════════════
+  // COLUMN 2 — Address details (center)
+  // ════════════════════════════════════════════════
+  const centerX = overlayLeft + miniMapWidth + gap;
+  const centerY = overlayTop;
 
-  ctx.textAlign = 'left';
+  ctx.save();
   ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
 
-  // Load flag image if needed
-  let flagImg: HTMLImageElement | null = null;
-  if (lines[0].hasFlag && location.countryCode) {
-    try {
-      flagImg = await loadFlagImage(location.countryCode);
-    } catch (e) {
-      console.warn('Failed to load flag', e);
-    }
+  const centerMidX = centerX + centerColWidth / 2;
+
+  // Font sizes
+  const fontSizeFullAddr = Math.round(11 * scale);
+  const fontSizeDistrict = Math.round(35 * scale);
+  const fontSizeProvince = Math.round(35 * scale);
+  const fontSizeCountry = Math.round(35 * scale);
+  const fontSizeDateTime = Math.round(30 * scale);
+
+  // Full address at the top (single line, small, may truncate)
+  ctx.font = `200 ${fontSizeFullAddr}px "Roboto", sans-serif`;
+  const fullAddrMaxW = centerColWidth - padding * 2;
+  let fullAddrText = location.fullAddress;
+  // Truncate if too long
+  while (ctx.measureText(fullAddrText).width > fullAddrMaxW && fullAddrText.length > 10) {
+    fullAddrText = fullAddrText.slice(0, -4) + '...';
+  }
+  const fullAddrY = centerY + Math.round(padding * 1.5) + fontSizeFullAddr;
+  ctx.fillText(fullAddrText, centerMidX, fullAddrY);
+
+  // Calculate remaining space for center content - removing separator line
+  const contentTopY = fullAddrY + Math.round(16 * scale);
+  // Date format: YYYY-MM-DD(Day) HH:mm
+  const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const d = dateTime.date;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const dayName = DAYS_SHORT[d.getDay()];
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const dateTimeText = `${yyyy}-${mm}-${dd}(${dayName})  ${hh}:${min}`;
+  const bottomY = centerY + overlayHeight - padding;
+
+  // Available height for district/province/country + datetime
+  const availableHeight = bottomY - contentTopY;
+
+  // We have 3 lines: district, province, country (datetime moved to bottom)
+  // Try to auto-scale to fit
+  let textScaleFactor = 1.0;
+  const totalNominal = fontSizeDistrict + fontSizeProvince + fontSizeCountry;
+  const lineSpacing = Math.round(14 * scale);
+  const totalWithSpacing = totalNominal + lineSpacing * 2;
+  if (totalWithSpacing > availableHeight) {
+    textScaleFactor = availableHeight / totalWithSpacing;
   }
 
-  for (let i = 0; i < wrappedTextData.length; i++) {
-    const block = wrappedTextData[i];
-    ctx.font = `${block.bold ? '700' : '400'} ${block.fontSize}px "Roboto", sans-serif`;
+  const scaledDistrict = Math.round(fontSizeDistrict * textScaleFactor);
+  const scaledProvince = Math.round(fontSizeProvince * textScaleFactor);
+  const scaledCountry = Math.round(fontSizeCountry * textScaleFactor);
+  const scaledSpacing = Math.round(lineSpacing * textScaleFactor);
 
-    for (let j = 0; j < block.lines.length; j++) {
-      const wLine = block.lines[j];
-      ctx.fillText(wLine, textX, textY);
+  const actualTotalH = scaledDistrict + scaledProvince + scaledCountry + scaledSpacing * 2;
+  const startY = contentTopY + (availableHeight - actualTotalH) * 0.1;
 
-      // Draw flag on the LAST line of the block if it has a flag
-      if (block.hasFlag && j === block.lines.length - 1 && flagImg) {
-        const textWidth = ctx.measureText(wLine).width;
-        const flagH = Math.round(block.fontSize * 1.3);
-        const flagW = Math.round(flagH * 1.2);
+  // District (Kec)
+  let curY = startY + scaledDistrict;
+  ctx.font = `400 ${scaledDistrict}px "Roboto", sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(location.district || location.city || 'Kec', centerMidX, curY);
 
-        const flagYPos = textY - Math.round(block.fontSize * 0.35) - Math.round(flagH / 2);
-        const flagX = textX + textWidth + Math.round(10 * scale);
+  // Province (Jawa Tengah)
+  curY += scaledSpacing + scaledProvince;
+  ctx.font = `400 ${scaledProvince}px "Roboto", sans-serif`;
+  ctx.fillText(location.province, centerMidX, curY);
 
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = 2;
-        ctx.drawImage(flagImg, flagX, flagYPos, flagW, flagH);
-        ctx.restore();
-      }
+  // Country (Indonesia) + Flag
+  curY += scaledSpacing + scaledCountry;
+  ctx.font = `400 ${scaledCountry}px "Roboto", sans-serif`;
+  const countryText = location.country;
+  ctx.fillText(countryText, centerMidX, curY);
 
-      textY += block.fontSize * lineHeight;
 
-      // Add extra gap after the first block (Title)
-      if (i === 0 && j === block.lines.length - 1) {
-        textY += titleBodyGap;
-      }
+  ctx.restore();
+
+  // ════════════════════════════════════════════════
+  // Date/Time — bottom center of entire overlay
+  // ════════════════════════════════════════════════
+  ctx.save();
+  const dtFontSize = Math.round(fontSizeDateTime * textScaleFactor);
+  const dtBottomPad = Math.round(8 * scale);
+  const dtY = overlayTop + overlayHeight - dtBottomPad;
+  ctx.font = `400 ${dtFontSize}px "Roboto", sans-serif`;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(dateTimeText, centerX + centerColWidth / 2, dtY);
+  ctx.restore();
+
+  // ════════════════════════════════════════════════
+  // COLUMN 3 — Weather (right)
+  // ════════════════════════════════════════════════
+  if (weatherData && weatherColWidth > 0) {
+    const weatherX = overlayLeft + overlayWidth - weatherColWidth;
+    const weatherY = overlayTop;
+    const rightPadding = Math.round(20 * scale);
+    const weatherAnchorX = overlayLeft + overlayWidth - rightPadding; // right-aligned anchor
+
+    ctx.save();
+
+    // Weather icon
+    const iconSize = Math.round(overlayHeight * 0.38);
+    const iconY = weatherY + padding;
+    try {
+      const weatherIcon = await loadWeatherIcon(weatherData.iconUrl);
+      ctx.drawImage(weatherIcon, weatherAnchorX - iconSize, iconY, iconSize, iconSize);
+    } catch {
+      // Draw fallback weather symbol
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `${iconSize}px sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      const fallbackEmoji = getWeatherEmoji(weatherData.weatherCode);
+      ctx.fillText(fallbackEmoji, weatherAnchorX, iconY);
     }
+
+    // Temperature — positioned from bottom of overlay
+    const tempFontSizeC = Math.round(50 * scale);
+    const tempFontSizeF = Math.round(50 * scale);
+    const bottomPadding = Math.round(9 * scale);
+    const tempGap = Math.round(4 * scale);
+
+    // °F at the bottom
+    const tempFY = weatherY + overlayHeight - bottomPadding - tempFontSizeF;
+    // °C above °F
+    const tempCY = tempFY - tempGap - tempFontSizeC;
+
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `350 ${tempFontSizeC}px "Roboto", sans-serif`;
+    ctx.fillText(`${weatherData.temperatureC}°C`, weatherAnchorX, tempCY);
+
+    // Temperature in °F
+    ctx.font = `350 ${tempFontSizeF}px "Roboto", sans-serif`;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillText(`${weatherData.temperatureF}°F`, weatherAnchorX, tempFY);
+
+    ctx.restore();
   }
 }
 
@@ -495,7 +415,7 @@ function loadStaticMap(lat: number, lng: number, width: number, height: number, 
 
     const pixelW = Math.max(Math.round(width / scale), 100);
     const pixelH = Math.max(Math.round(height / scale), 100);
-    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelW}x${pixelH}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=13&size=${pixelW}x${pixelH}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -511,33 +431,45 @@ function loadBadgeIcon(): Promise<HTMLImageElement> {
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = reject;
-    img.src = '/icon.png'; // Placeholder icon from public folder
+    img.src = '/icon.png';
   });
 }
 
+function loadWeatherIcon(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function getWeatherEmoji(code: number): string {
+  if (code === 0) return '☀️';
+  if (code <= 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code <= 48) return '🌫️';
+  if (code <= 57) return '🌧️';
+  if (code <= 67) return '🌧️';
+  if (code <= 77) return '❄️';
+  if (code <= 82) return '🌦️';
+  if (code <= 86) return '🌨️';
+  return '⛈️';
+}
 
 function loadFlagImage(countryCode: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     if (!countryCode) return reject(new Error('No country code'));
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      console.log(`Flag loaded successfully: ${img.src}`);
-      resolve(img);
-    };
-    img.onerror = () => {
-      console.warn(`Local flag not found for ${countryCode}. Tried loading: ${img.src}`);
-      reject(new Error(`Flag not found for ${countryCode}`));
-    };
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Flag not found for ${countryCode}`));
 
-    // Convert country code to unicode codepoint hex string (e.g. ID -> u1f1ee_1f1e9)
     const cc = countryCode.toUpperCase();
     const codes = [...cc].map((c) => (0x1f1e6 + c.charCodeAt(0) - 65).toString(16));
     const filename = 'u' + codes.join('_');
-
-    const src = `/flags/${filename}.png`;
-    console.log(`Attempting to load flag for ${countryCode}: ${src}`);
-    img.src = src;
+    img.src = `/flags/${filename}.png`;
   });
 }
 

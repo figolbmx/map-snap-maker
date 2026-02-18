@@ -1,12 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MapPin, Camera } from 'lucide-react';
 import PhotoUpload from '@/components/PhotoUpload';
 import MapSelector from '@/components/MapSelector';
 import DateTimePicker from '@/components/DateTimePicker';
 import ProSettingsPanel from '@/components/ProSettingsPanel';
 import PreviewCanvas from '@/components/PreviewCanvas';
-import type { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
+import type { LocationData, DateTimeData, ProSettings, WeatherData } from '@/types/geotag';
 import { defaultLayoutSettings } from '@/types/geotag';
+import { fetchWeather } from '@/lib/weatherApi';
 
 const defaultDateTime: DateTimeData = {
   date: new Date(),
@@ -31,6 +32,21 @@ export default function Index() {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [dateTime, setDateTime] = useState<DateTimeData>(defaultDateTime);
   const [proSettings, setProSettings] = useState<ProSettings>(defaultProSettings);
+  const [weatherData, setWeatherData] = useState<WeatherData | undefined>(undefined);
+
+  // Fetch weather when location changes
+  useEffect(() => {
+    if (!location) {
+      setWeatherData(undefined);
+      return;
+    }
+    fetchWeather(location.lat, location.lng)
+      .then(setWeatherData)
+      .catch((err) => {
+        console.warn('Failed to fetch weather:', err);
+        setWeatherData(undefined);
+      });
+  }, [location]);
 
   const handleImageLoad = useCallback((img: HTMLImageElement, _file: File, url: string) => {
     setImage(img);
@@ -94,6 +110,7 @@ export default function Index() {
                 location={location}
                 dateTime={dateTime}
                 proSettings={proSettings}
+                weatherData={weatherData}
               />
             </div>
           </div>
