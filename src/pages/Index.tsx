@@ -18,6 +18,7 @@ const defaultDateTime: DateTimeData = {
 const defaultProSettings: ProSettings = {
   showLatLong: true,
   showFullAddress: true,
+  showPlusCode: true,
   overlayOpacity: 70,
   use24hFormat: false,
   watermarkText: 'GPS Map Camera',

@@ -89,9 +89,13 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
 
 
           let formattedAddress = result.results[0].formatted_address;
-          // Remove Plus Code if present (e.g. "9WQM+45M, ")
-          // Pattern: 4+ alphanumeric, +, 2+ alphanumeric, followed by comma or space
-          const plusCodeRegex = /^[A-Z0-9]{4,}\+[A-Z0-9]{2,}[, ]\s*/;
+
+          // Extract Plus Code if present (e.g. "9WQM+45M, ")
+          const plusCodeRegex = /^([A-Z0-9]{4,}\+[A-Z0-9]{2,})[, ]\s*/;
+          const plusCodeMatch = formattedAddress.match(plusCodeRegex);
+          const plusCode = plusCodeMatch ? plusCodeMatch[1] : (result.plus_code?.global_code || result.results[0].plus_code?.global_code);
+
+          // Remove Plus Code from formattedAddress for internal storage
           formattedAddress = formattedAddress.replace(plusCodeRegex, '');
 
           onLocationChange({
@@ -103,6 +107,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
             country,
             countryCode,
             fullAddress: formattedAddress,
+            plusCode,
           });
         }
       } catch (err) {
@@ -117,6 +122,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
           country: 'Indonesia',
           countryCode: 'ID',
           fullAddress: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          plusCode: undefined,
         });
       }
     },
@@ -413,6 +419,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
                     country: location?.country || 'Indonesia',
                     countryCode: location?.countryCode || 'ID',
                     fullAddress: location?.fullAddress || 'Karanganyar, Jawa Tengah, Indonesia',
+                    plusCode: location?.plusCode,
                   });
                 }
               }}
@@ -503,7 +510,9 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
       {location && (
         <div className="mt-3 space-y-1 text-xs">
           <p className="text-foreground font-medium">{location.district}, {location.province}</p>
-          <p className="text-muted-foreground truncate">{location.fullAddress}</p>
+          <p className="text-muted-foreground truncate">
+            {location.plusCode ? `${location.plusCode}, ` : ''}{location.fullAddress}
+          </p>
           <p className="text-primary font-mono">
             {location.lat.toFixed(6)}°, {location.lng.toFixed(6)}°
           </p>

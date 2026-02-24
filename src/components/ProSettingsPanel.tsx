@@ -38,25 +38,16 @@ export default function ProSettingsPanel({ settings, onChange }: ProSettingsProp
         />
 
         <ToggleRow
+          label="Tampilkan Plus Code"
+          active={settings.showPlusCode}
+          onToggle={() => onChange({ ...settings, showPlusCode: !settings.showPlusCode })}
+        />
+
+        <ToggleRow
           label="Format 24 Jam"
           active={settings.use24hFormat}
           onToggle={() => onChange({ ...settings, use24hFormat: !settings.use24hFormat })}
         />
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-foreground">Opacity Overlay</span>
-            <span className="text-xs text-primary font-mono">{settings.overlayOpacity}%</span>
-          </div>
-          <input
-            type="range"
-            min={30}
-            max={100}
-            value={settings.overlayOpacity}
-            onChange={(e) => onChange({ ...settings, overlayOpacity: parseInt(e.target.value) })}
-            className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
-          />
-        </div>
 
 
         <div>
@@ -135,6 +126,21 @@ export default function ProSettingsPanel({ settings, onChange }: ProSettingsProp
                 className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
               />
             </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-foreground">Opacity Overlay</span>
+              <span className="text-xs text-primary font-mono">{settings.overlayOpacity}%</span>
+            </div>
+            <input
+              type="range"
+              min={30}
+              max={100}
+              value={settings.overlayOpacity}
+              onChange={(e) => onChange({ ...settings, overlayOpacity: parseInt(e.target.value) })}
+              className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
+            />
           </div>
         </div>
       </div>

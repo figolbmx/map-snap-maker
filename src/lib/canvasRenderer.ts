@@ -147,7 +147,11 @@ async function drawOverlay(
   ];
 
   if (proSettings.showFullAddress) {
-    lines.push({ text: location.fullAddress, fontSize: fontSizeBody, bold: false });
+    let address = location.fullAddress;
+    if (proSettings.showPlusCode && location.plusCode) {
+      address = `${location.plusCode}, ${address}`;
+    }
+    lines.push({ text: address, fontSize: fontSizeBody, bold: false });
   }
 
   if (proSettings.showLatLong) {
@@ -318,7 +322,7 @@ async function drawOverlay(
 
   try {
     const mapImg = await loadStaticMap(location.lat, location.lng, miniMapWidth, miniMapHeight, scale, proSettings.mapType);
-    ctx.save();[246]
+    ctx.save();
     // White background behind map
     ctx.fillStyle = '#ffffff';
     roundRect(ctx, mmX, mmY, miniMapWidth, miniMapHeight, mapBorderRadius);

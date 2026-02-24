@@ -7,6 +7,7 @@ export interface LocationData {
   country: string;
   countryCode: string;
   fullAddress: string;
+  plusCode?: string;
 }
 
 export interface DateTimeData {
@@ -31,6 +32,7 @@ export const defaultLayoutSettings: LayoutSettings = {
 export interface ProSettings {
   showLatLong: boolean;
   showFullAddress: boolean;
+  showPlusCode: boolean;
   overlayOpacity: number;
   use24hFormat: boolean;
   watermarkText: string;
