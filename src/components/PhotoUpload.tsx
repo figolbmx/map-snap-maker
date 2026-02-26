@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Upload, Image as ImageIcon, X, CheckCircle2 } from 'lucide-react';
 import type { DateTimeData } from '@/types/geotag';
 
@@ -27,7 +27,7 @@ export default function PhotoUpload({
   onClearAll,
 }: PhotoUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+
 
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
@@ -117,15 +117,15 @@ export default function PhotoUpload({
       )}
 
       {/* Drop Zone */}
-      <div
+      <label
+        htmlFor="photo-upload-input"
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg text-center cursor-pointer transition-all ${images.length > 0 ? 'p-4' : 'p-8'
+        className={`block border-2 border-dashed rounded-lg text-center cursor-pointer transition-all ${images.length > 0 ? 'p-4' : 'p-8'
           } ${isDragging
             ? 'border-primary bg-primary/5'
             : 'border-border hover:border-primary/50 hover:bg-secondary/50'
@@ -138,14 +138,15 @@ export default function PhotoUpload({
         <p className="text-xs text-muted-foreground mt-1">
           JPG, PNG — bisa pilih banyak foto sekaligus
         </p>
-      </div>
+      </label>
 
       <input
+        id="photo-upload-input"
         ref={inputRef}
         type="file"
         accept="image/*"
         multiple
-        className="hidden"
+        className="sr-only"
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
           e.target.value = '';
