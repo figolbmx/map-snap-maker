@@ -1,6 +1,6 @@
-import { Settings, Eye, EyeOff, Type } from 'lucide-react';
+import { Accordion, AccordionItem, Switch, ButtonGroup, Button } from '@nextui-org/react';
+import { Settings } from 'lucide-react';
 import type { ProSettings as ProSettingsType } from '@/types/geotag';
-import { defaultLayoutSettings } from '@/types/geotag';
 
 interface ProSettingsProps {
   settings: ProSettingsType;
@@ -8,167 +8,78 @@ interface ProSettingsProps {
 }
 
 export default function ProSettingsPanel({ settings, onChange }: ProSettingsProps) {
-  const ls = settings.layoutSettings || defaultLayoutSettings;
-
-  const updateFontSize = (key: keyof typeof defaultLayoutSettings, value: number) => {
-    onChange({
-      ...settings,
-      layoutSettings: { ...ls, [key]: value },
-    });
-  };
-
   return (
     <div className="card-elevated p-4 animate-fade-in">
-      <h3 className="section-title flex items-center gap-2">
-        <Settings className="w-4 h-4 text-primary" />
-        Pro Settings
-      </h3>
-
-      <div className="space-y-4">
-        <ToggleRow
-          label="Tampilkan Lat/Long"
-          active={settings.showLatLong}
-          onToggle={() => onChange({ ...settings, showLatLong: !settings.showLatLong })}
-        />
-
-        <ToggleRow
-          label="Tampilkan Alamat Lengkap"
-          active={settings.showFullAddress}
-          onToggle={() => onChange({ ...settings, showFullAddress: !settings.showFullAddress })}
-        />
-
-        <ToggleRow
-          label="Tampilkan Plus Code"
-          active={settings.showPlusCode}
-          onToggle={() => onChange({ ...settings, showPlusCode: !settings.showPlusCode })}
-        />
-
-        <ToggleRow
-          label="Format 24 Jam"
-          active={settings.use24hFormat}
-          onToggle={() => onChange({ ...settings, use24hFormat: !settings.use24hFormat })}
-        />
-
-
-        <div>
-          <label className="text-sm text-foreground block mb-2">Tipe Peta</label>
-          <div className="flex bg-secondary rounded-lg p-1">
-            <button
-              onClick={() => onChange({ ...settings, mapType: 'satellite' })}
-              className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${settings.mapType === 'satellite'
-                ? 'bg-background text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Satelite
-            </button>
-            <button
-              onClick={() => onChange({ ...settings, mapType: 'roadmap' })}
-              className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${settings.mapType === 'roadmap'
-                ? 'bg-background text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Normal
-            </button>
-          </div>
-        </div>
-
-        {/* Font Size Controls */}
-        <div className="pt-2 border-t border-border">
-          <label className="text-sm text-foreground flex items-center gap-1.5 mb-3">
-            <Type className="w-3.5 h-3.5 text-primary" />
-            Ukuran Teks
-          </label>
-
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Judul</span>
-                <span className="text-xs text-primary font-mono">{ls.fontSizeTitle}px</span>
-              </div>
-              <input
-                type="range"
-                min={10}
-                max={80}
-                value={ls.fontSizeTitle}
-                onChange={(e) => updateFontSize('fontSizeTitle', parseInt(e.target.value))}
-                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Body</span>
-                <span className="text-xs text-primary font-mono">{ls.fontSizeBody}px</span>
-              </div>
-              <input
-                type="range"
-                min={10}
-                max={60}
-                value={ls.fontSizeBody}
-                onChange={(e) => updateFontSize('fontSizeBody', parseInt(e.target.value))}
-                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Watermark</span>
-                <span className="text-xs text-primary font-mono">{ls.fontSizeWatermark}px</span>
-              </div>
-              <input
-                type="range"
-                min={8}
-                max={30}
-                value={ls.fontSizeWatermark}
-                onChange={(e) => updateFontSize('fontSizeWatermark', parseInt(e.target.value))}
-                className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-foreground">Opacity Overlay</span>
-              <span className="text-xs text-primary font-mono">{settings.overlayOpacity}%</span>
-            </div>
-            <input
-              type="range"
-              min={30}
-              max={100}
-              value={settings.overlayOpacity}
-              onChange={(e) => onChange({ ...settings, overlayOpacity: parseInt(e.target.value) })}
-              className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-lg"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ToggleRow({ label, active, onToggle }: { label: string; active: boolean; onToggle: () => void }) {
-  return (
-    <div
-      className="flex items-center justify-between cursor-pointer group"
-      onClick={onToggle}
-    >
-      <span className="text-sm text-foreground">{label}</span>
-      <button
-        className={`relative w-10 h-5 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-secondary'
-          }`}
+      <Accordion
+        isCompact
+        defaultExpandedKeys={[]}
+        className="-mx-2"
       >
-        <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-foreground shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'
-            }`}
-        />
-        {active ? (
-          <Eye className="absolute right-6 top-0.5 w-3.5 h-3.5 text-primary" />
-        ) : (
-          <EyeOff className="absolute right-6 top-0.5 w-3.5 h-3.5 text-muted-foreground" />
-        )}
-      </button>
+        <AccordionItem
+          key="pro-settings"
+          aria-label="Pro Settings"
+          title={
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <Settings className="w-4 h-4 text-primary" />
+              Pro Settings
+            </span>
+          }
+        >
+          <div className="flex flex-col gap-4 pb-2">
+            <Switch
+              size="sm"
+              isSelected={settings.showLatLong}
+              onValueChange={(val) => onChange({ ...settings, showLatLong: val })}
+            >
+              Tampilkan Lat/Long
+            </Switch>
+
+            <Switch
+              size="sm"
+              isSelected={settings.showFullAddress}
+              onValueChange={(val) => onChange({ ...settings, showFullAddress: val })}
+            >
+              Tampilkan Alamat Lengkap
+            </Switch>
+
+            <Switch
+              size="sm"
+              isSelected={settings.showPlusCode}
+              onValueChange={(val) => onChange({ ...settings, showPlusCode: val })}
+            >
+              Tampilkan Plus Code
+            </Switch>
+
+            <Switch
+              size="sm"
+              isSelected={settings.use24hFormat}
+              onValueChange={(val) => onChange({ ...settings, use24hFormat: val })}
+            >
+              Format 24 Jam
+            </Switch>
+
+            <div>
+              <label className="text-sm text-foreground block mb-2">Tipe Peta</label>
+              <ButtonGroup size="sm" fullWidth>
+                <Button
+                  variant={settings.mapType === 'satellite' ? 'solid' : 'flat'}
+                  color={settings.mapType === 'satellite' ? 'primary' : 'default'}
+                  onPress={() => onChange({ ...settings, mapType: 'satellite' })}
+                >
+                  Satelite
+                </Button>
+                <Button
+                  variant={settings.mapType === 'roadmap' ? 'solid' : 'flat'}
+                  color={settings.mapType === 'roadmap' ? 'primary' : 'default'}
+                  onPress={() => onChange({ ...settings, mapType: 'roadmap' })}
+                >
+                  Normal
+                </Button>
+              </ButtonGroup>
+            </div>
+          </div>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }

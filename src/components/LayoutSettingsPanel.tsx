@@ -1,6 +1,5 @@
+import { Slider } from '@nextui-org/react';
 import { ProSettings, defaultLayoutSettings } from '@/types/geotag';
-import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
 import { Settings2, RotateCcw } from 'lucide-react';
 
 interface LayoutSettingsPanelProps {
@@ -41,141 +40,135 @@ export default function LayoutSettingsPanel({ settings, onChange }: LayoutSettin
                 </button>
             </div>
 
-            <div className="space-y-4">
-                {/* Height Ratio */}
-                <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                        <Label>InfoBox Height Ratio</Label>
-                        <span className="text-primary font-mono">{ls.infoBoxHeightRatio.toFixed(2)}</span>
-                    </div>
+            <div className="space-y-5">
+                <Slider
+                    label="InfoBox Height Ratio"
+                    size="sm"
+                    step={0.01}
+                    minValue={0.1}
+                    maxValue={0.5}
+                    value={ls.infoBoxHeightRatio}
+                    onChange={(val) => updateLs({ infoBoxHeightRatio: val as number })}
+                    className="max-w-full"
+                    renderValue={({ children }) => (
+                        <span className="text-xs text-primary font-mono">{Number(children).toFixed(2)}</span>
+                    )}
+                />
+
+                <Slider
+                    label="Map Width Multiplier"
+                    size="sm"
+                    step={0.01}
+                    minValue={0.5}
+                    maxValue={2.0}
+                    value={ls.miniMapWidthMultiplier}
+                    onChange={(val) => updateLs({ miniMapWidthMultiplier: val as number })}
+                    className="max-w-full"
+                    renderValue={({ children }) => (
+                        <span className="text-xs text-primary font-mono">{Number(children).toFixed(2)}</span>
+                    )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
                     <Slider
-                        value={[ls.infoBoxHeightRatio]}
-                        min={0.1}
-                        max={0.5}
-                        step={0.01}
-                        onValueChange={([val]) => updateLs({ infoBoxHeightRatio: val })}
+                        label="Main Font"
+                        size="sm"
+                        step={1}
+                        minValue={10}
+                        maxValue={80}
+                        value={ls.fontSizeTitle}
+                        onChange={(val) => updateLs({ fontSizeTitle: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{children}</span>
+                        )}
+                    />
+                    <Slider
+                        label="Body Font"
+                        size="sm"
+                        step={1}
+                        minValue={10}
+                        maxValue={60}
+                        value={ls.fontSizeBody}
+                        onChange={(val) => updateLs({ fontSizeBody: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{children}</span>
+                        )}
                     />
                 </div>
 
-                {/* Map Width */}
-                <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                        <Label>Map Width Multiplier</Label>
-                        <span className="text-primary font-mono">{ls.miniMapWidthMultiplier.toFixed(2)}</span>
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
                     <Slider
-                        value={[ls.miniMapWidthMultiplier]}
-                        min={0.5}
-                        max={2.0}
-                        step={0.01}
-                        onValueChange={([val]) => updateLs({ miniMapWidthMultiplier: val })}
-                    />
-                </div>
-
-                {/* Font Sizes */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Main Font</Label>
-                            <span className="text-primary font-mono">{ls.fontSizeTitle}</span>
-                        </div>
-                        <Slider
-                            value={[ls.fontSizeTitle]}
-                            min={10}
-                            max={80}
-                            step={1}
-                            onValueChange={([val]) => updateLs({ fontSizeTitle: val })}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Body Font</Label>
-                            <span className="text-primary font-mono">{ls.fontSizeBody}</span>
-                        </div>
-                        <Slider
-                            value={[ls.fontSizeBody]}
-                            min={10}
-                            max={60}
-                            step={1}
-                            onValueChange={([val]) => updateLs({ fontSizeBody: val })}
-                        />
-                    </div>
-                </div>
-
-                {/* Line Height & Gap */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Line Height</Label>
-                            <span className="text-primary font-mono">{ls.lineHeight.toFixed(1)}</span>
-                        </div>
-                        <Slider
-                            value={[ls.lineHeight]}
-                            min={1.0}
-                            max={2.0}
-                            step={0.1}
-                            onValueChange={([val]) => updateLs({ lineHeight: val })}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Title-Body Gap</Label>
-                            <span className="text-primary font-mono">{ls.titleBodyGap}</span>
-                        </div>
-                        <Slider
-                            value={[ls.titleBodyGap]}
-                            min={-20}
-                            max={20}
-                            step={1}
-                            onValueChange={([val]) => updateLs({ titleBodyGap: val })}
-                        />
-                    </div>
-                </div>
-
-                {/* Padding & Margin */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Padding</Label>
-                            <span className="text-primary font-mono">{ls.padding}</span>
-                        </div>
-                        <Slider
-                            value={[ls.padding]}
-                            min={0}
-                            max={40}
-                            step={1}
-                            onValueChange={([val]) => updateLs({ padding: val })}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                            <Label>Margin</Label>
-                            <span className="text-primary font-mono">{ls.margin}</span>
-                        </div>
-                        <Slider
-                            value={[ls.margin]}
-                            min={0}
-                            max={100}
-                            step={1}
-                            onValueChange={([val]) => updateLs({ margin: val })}
-                        />
-                    </div>
-                </div>
-
-                {/* Start Scale Factor */}
-                <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                        <Label>Auto-Scale Limit (Max Growth)</Label>
-                        <span className="text-primary font-mono">{ls.currentScaleFactorStart.toFixed(1)}x</span>
-                    </div>
-                    <Slider
-                        value={[ls.currentScaleFactorStart]}
-                        min={1.0}
-                        max={4.0}
+                        label="Line Height"
+                        size="sm"
                         step={0.1}
-                        onValueChange={([val]) => updateLs({ currentScaleFactorStart: val })}
+                        minValue={1.0}
+                        maxValue={2.0}
+                        value={ls.lineHeight}
+                        onChange={(val) => updateLs({ lineHeight: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{Number(children).toFixed(1)}</span>
+                        )}
+                    />
+                    <Slider
+                        label="Title-Body Gap"
+                        size="sm"
+                        step={1}
+                        minValue={-20}
+                        maxValue={20}
+                        value={ls.titleBodyGap}
+                        onChange={(val) => updateLs({ titleBodyGap: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{children}</span>
+                        )}
                     />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <Slider
+                        label="Padding"
+                        size="sm"
+                        step={1}
+                        minValue={0}
+                        maxValue={40}
+                        value={ls.padding}
+                        onChange={(val) => updateLs({ padding: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{children}</span>
+                        )}
+                    />
+                    <Slider
+                        label="Margin"
+                        size="sm"
+                        step={1}
+                        minValue={0}
+                        maxValue={100}
+                        value={ls.margin}
+                        onChange={(val) => updateLs({ margin: val as number })}
+                        className="max-w-full"
+                        renderValue={({ children }) => (
+                            <span className="text-xs text-primary font-mono">{children}</span>
+                        )}
+                    />
+                </div>
+
+                <Slider
+                    label="Auto-Scale Limit (Max Growth)"
+                    size="sm"
+                    step={0.1}
+                    minValue={1.0}
+                    maxValue={4.0}
+                    value={ls.currentScaleFactorStart}
+                    onChange={(val) => updateLs({ currentScaleFactorStart: val as number })}
+                    className="max-w-full"
+                    renderValue={({ children }) => (
+                        <span className="text-xs text-primary font-mono">{Number(children).toFixed(1)}x</span>
+                    )}
+                />
             </div>
         </div>
     );

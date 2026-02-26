@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
 import { MapPin, Camera } from 'lucide-react';
 import PhotoUpload from '@/components/PhotoUpload';
+import type { ImageItem } from '@/components/PhotoUpload';
 import MapSelector from '@/components/MapSelector';
 import DateTimePicker from '@/components/DateTimePicker';
 import ProSettingsPanel from '@/components/ProSettingsPanel';
+import TextSizePanel from '@/components/TextSizePanel';
 import PreviewCanvas from '@/components/PreviewCanvas';
 import type { LocationData, DateTimeData, ProSettings } from '@/types/geotag';
 import { defaultLayoutSettings } from '@/types/geotag';
@@ -27,22 +29,62 @@ const defaultProSettings: ProSettings = {
 };
 
 export default function Index() {
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [location, setLocation] = useState<LocationData | null>(null);
-  const [dateTime, setDateTime] = useState<DateTimeData>(defaultDateTime);
   const [proSettings, setProSettings] = useState<ProSettings>(defaultProSettings);
 
-  const handleImageLoad = useCallback((img: HTMLImageElement, _file: File, url: string) => {
-    setImage(img);
-    setImageUrl(url);
+  const activeImage = images[activeIndex] ?? null;
+  const activeDateTime = activeImage?.dateTime ?? defaultDateTime;
+
+  const handleImagesAdd = useCallback((items: ImageItem[]) => {
+    setImages((prev) => {
+      const itemsWithDateTime = items.map((item) => ({
+        ...item,
+        dateTime: { ...defaultDateTime, date: new Date() },
+      }));
+      const next = [...prev, ...itemsWithDateTime];
+      if (prev.length === 0) setActiveIndex(0);
+      return next;
+    });
   }, []);
 
-  const handleClearImage = useCallback(() => {
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
-    setImage(null);
-    setImageUrl(null);
-  }, [imageUrl]);
+  const handleDateTimeChange = useCallback(
+    (dt: DateTimeData) => {
+      setImages((prev) =>
+        prev.map((item, i) => (i === activeIndex ? { ...item, dateTime: dt } : item))
+      );
+    },
+    [activeIndex]
+  );
+
+  const handleRemove = useCallback(
+    (index: number) => {
+      setImages((prev) => {
+        const next = prev.filter((_, i) => i !== index);
+        // Revoke the URL of the removed image
+        URL.revokeObjectURL(prev[index].url);
+        return next;
+      });
+      setActiveIndex((prev) => {
+        if (images.length <= 1) return 0;
+        if (index < prev) return prev - 1;
+        if (index === prev) return Math.min(prev, images.length - 2);
+        return prev;
+      });
+    },
+    [images.length]
+  );
+
+  const handleClearAll = useCallback(() => {
+    images.forEach((item) => URL.revokeObjectURL(item.url));
+    setImages([]);
+    setActiveIndex(0);
+  }, [images]);
+
+  const handleSelect = useCallback((index: number) => {
+    setActiveIndex(index);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,7 +96,7 @@ export default function Index() {
           </div>
           <div>
             <h1 className="text-base font-bold text-foreground flex items-center gap-2">
-              GeoTag Photo Generator
+              GeoFuck - GeoTag Photo Generator
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary">
                 PRO
               </span>
@@ -78,23 +120,28 @@ export default function Index() {
           {/* Left Panel - Controls */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-4">
             <PhotoUpload
-              onImageLoad={handleImageLoad}
-              imageUrl={imageUrl}
-              onClear={handleClearImage}
+              images={images}
+              activeIndex={activeIndex}
+              onImagesAdd={handleImagesAdd}
+              onRemove={handleRemove}
+              onSelect={handleSelect}
+              onClearAll={handleClearAll}
             />
-            <DateTimePicker dateTime={dateTime} onChange={setDateTime} />
+            <DateTimePicker dateTime={activeDateTime} onChange={handleDateTimeChange} />
             <MapSelector location={location} onLocationChange={setLocation} />
             <ProSettingsPanel settings={proSettings} onChange={setProSettings} />
+            <TextSizePanel settings={proSettings} onChange={setProSettings} />
           </div>
 
           {/* Right Panel - Preview */}
           <div className="lg:col-span-7 xl:col-span-8">
             <div className="lg:sticky lg:top-20">
               <PreviewCanvas
-                image={image}
+                image={activeImage?.img ?? null}
                 location={location}
-                dateTime={dateTime}
+                dateTime={activeDateTime}
                 proSettings={proSettings}
+                allImages={images}
               />
             </div>
           </div>
@@ -105,7 +152,7 @@ export default function Index() {
       <footer className="border-t border-border mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
           <p className="text-xs text-muted-foreground">
-            GeoTag Photo Generator Pro — Buat overlay GPS pada foto Anda
+            ©️ figol - GeoTag Photo Generator Pro
           </p>
         </div>
       </footer>

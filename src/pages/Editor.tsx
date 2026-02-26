@@ -2,9 +2,11 @@ import { useState, useCallback } from 'react';
 import { MapPin, Camera, Settings2, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PhotoUpload from '@/components/PhotoUpload';
+import type { ImageItem } from '@/components/PhotoUpload';
 import MapSelector from '@/components/MapSelector';
 import DateTimePicker from '@/components/DateTimePicker';
 import ProSettingsPanel from '@/components/ProSettingsPanel';
+import TextSizePanel from '@/components/TextSizePanel';
 import PreviewCanvas from '@/components/PreviewCanvas';
 import LayoutSettingsPanel from '@/components/LayoutSettingsPanel';
 import { defaultLayoutSettings } from '@/types/geotag';
@@ -20,6 +22,7 @@ const defaultDateTime: DateTimeData = {
 const defaultProSettings: ProSettings = {
     showLatLong: true,
     showFullAddress: true,
+    showPlusCode: true,
     overlayOpacity: 70,
     use24hFormat: false,
     watermarkText: 'GPS Map Camera',
@@ -28,22 +31,56 @@ const defaultProSettings: ProSettings = {
 };
 
 export default function Editor() {
-    const [image, setImage] = useState<HTMLImageElement | null>(null);
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [images, setImages] = useState<ImageItem[]>([]);
+    const [activeIndex, setActiveIndex] = useState(0);
     const [location, setLocation] = useState<LocationData | null>(null);
-    const [dateTime, setDateTime] = useState<DateTimeData>(defaultDateTime);
     const [proSettings, setProSettings] = useState<ProSettings>(defaultProSettings);
 
-    const handleImageLoad = useCallback((img: HTMLImageElement, _file: File, url: string) => {
-        setImage(img);
-        setImageUrl(url);
+    const activeImage = images[activeIndex] ?? null;
+    const activeDateTime = activeImage?.dateTime ?? defaultDateTime;
+
+    const handleImagesAdd = useCallback((items: ImageItem[]) => {
+        setImages((prev) => {
+            const itemsWithDateTime = items.map((item) => ({
+                ...item,
+                dateTime: { ...defaultDateTime, date: new Date() },
+            }));
+            const next = [...prev, ...itemsWithDateTime];
+            if (prev.length === 0) setActiveIndex(0);
+            return next;
+        });
     }, []);
 
-    const handleClearImage = useCallback(() => {
-        if (imageUrl) URL.revokeObjectURL(imageUrl);
-        setImage(null);
-        setImageUrl(null);
-    }, [imageUrl]);
+    const handleDateTimeChange = useCallback(
+        (dt: DateTimeData) => {
+            setImages((prev) =>
+                prev.map((item, i) => (i === activeIndex ? { ...item, dateTime: dt } : item))
+            );
+        },
+        [activeIndex]
+    );
+
+    const handleRemove = useCallback(
+        (index: number) => {
+            setImages((prev) => {
+                URL.revokeObjectURL(prev[index].url);
+                return prev.filter((_, i) => i !== index);
+            });
+            setActiveIndex((prev) => {
+                if (images.length <= 1) return 0;
+                if (index < prev) return prev - 1;
+                if (index === prev) return Math.min(prev, images.length - 2);
+                return prev;
+            });
+        },
+        [images.length]
+    );
+
+    const handleClearAll = useCallback(() => {
+        images.forEach((item) => URL.revokeObjectURL(item.url));
+        setImages([]);
+        setActiveIndex(0);
+    }, [images]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -76,22 +113,28 @@ export default function Editor() {
                     {/* Left Panel - Image & Map */}
                     <div className="xl:col-span-3 space-y-4">
                         <PhotoUpload
-                            onImageLoad={handleImageLoad}
-                            imageUrl={imageUrl}
-                            onClear={handleClearImage}
+                            images={images}
+                            activeIndex={activeIndex}
+                            onImagesAdd={handleImagesAdd}
+                            onRemove={handleRemove}
+                            onSelect={setActiveIndex}
+                            onClearAll={handleClearAll}
                         />
                         <MapSelector location={location} onLocationChange={setLocation} />
                         <ProSettingsPanel settings={proSettings} onChange={setProSettings} />
+                        <TextSizePanel settings={proSettings} onChange={setProSettings} />
+                        <DateTimePicker dateTime={activeDateTime} onChange={handleDateTimeChange} />
                     </div>
 
                     {/* Middle Panel - Preview */}
                     <div className="xl:col-span-6">
                         <div className="sticky top-20">
                             <PreviewCanvas
-                                image={image}
+                                image={activeImage?.img ?? null}
                                 location={location}
-                                dateTime={dateTime}
+                                dateTime={activeDateTime}
                                 proSettings={proSettings}
+                                allImages={images}
                             />
                         </div>
                     </div>
