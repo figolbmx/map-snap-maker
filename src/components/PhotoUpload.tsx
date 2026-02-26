@@ -142,7 +142,6 @@ export default function PhotoUpload({
 
       <input
         id="photo-upload-input"
-        ref={inputRef}
         type="file"
         accept="image/*"
         multiple
