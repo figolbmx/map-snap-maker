@@ -172,7 +172,7 @@ export default function MapSelector({ location, onLocationChange }: MapSelectorP
     if (!mapLoaded || !mapRef.current) return;
     const g = (window as any).google;
 
-    const defaultCenter = { lat: , lng:  };
+    const defaultCenter = { lat: 0, lng: 0 };
     const center = location ? { lat: location.lat, lng: location.lng } : defaultCenter;
 
     const map = new g.maps.Map(mapRef.current, {
