@@ -66,7 +66,61 @@ export async function renderPreview(
   await drawOverlay(ctx, dw, dh, location, dateTime, proSettings, false);
 }
 
-function calculateCrop(srcW: number, srcH: number) {
+/** Random heading in degrees (0-360) for the direction icon. */
+export function randomHeadingDegrees(): number {
+  return Math.random() * 360;
+}
+
+/**
+ * Layout for the direction icon.
+ *
+ * The rotation pivot is the bottom-centre of the image (not its geometric
+ * centre), and that same bottom-centre point is anchored on the map pin's tip,
+ * so the arrow always points outwards from the exact coordinate.
+ */
+export function calculateDirectionLayout(
+  miniMapWidth: number,
+  miniMapHeight: number,
+  scale: number,
+  imageWidth: number,
+  imageHeight: number,
+  headingDegrees: number
+): { anchorX: number; anchorY: number; width: number; height: number; angleRadians: number } {
+  const aspect = imageWidth > 0 ? imageHeight / imageWidth : 1;
+  const width = Math.min(miniMapWidth * 0.62, 180 * scale);
+  return {
+    // Bottom-centre of the icon sits on the map centre, matching the pin tip.
+    anchorX: miniMapWidth / 2,
+    anchorY: miniMapHeight / 2,
+    width,
+    height: width * aspect,
+    angleRadians: (headingDegrees * Math.PI) / 180,
+  };
+}
+
+/**
+ * Position the custom pin inside the mini map. The pin tip (bottom center) must
+ * land exactly on the mini map centre, which is the selected coordinate.
+ */
+export function calculatePinLayout(
+  miniMapWidth: number,
+  miniMapHeight: number,
+  scale: number,
+  imageWidth: number,
+  imageHeight: number
+): { x: number; y: number; width: number; height: number } {
+  const aspect = imageHeight > 0 ? imageWidth / imageHeight : 1;
+  const height = Math.min(miniMapHeight * 0.32, 96 * scale);
+  const width = height * aspect;
+  return {
+    x: miniMapWidth / 2 - width / 2,
+    y: miniMapHeight / 2 - height,
+    width,
+    height,
+  };
+}
+
+export function calculateCrop(srcW: number, srcH: number) {
   const isLandscape = srcW >= srcH;
   const targetRatio = isLandscape ? 4 / 3 : 3 / 4;
   const srcRatio = srcW / srcH;
@@ -338,6 +392,52 @@ async function drawOverlay(
     const offsetH = (sizeH - miniMapHeight) / 2;
     ctx.drawImage(mapImg, mmX - offsetW, mmY - offsetH, sizeW, sizeH);
 
+    // Draw the local direction icon at a stable random heading for this render.
+    try {
+      const directionImg = await loadDirectionPin();
+      const direction = calculateDirectionLayout(
+        miniMapWidth,
+        miniMapHeight,
+        scale,
+        directionImg.naturalWidth,
+        directionImg.naturalHeight,
+        randomHeadingDegrees()
+      );
+      const directionAnchorX = mmX + direction.anchorX;
+      const directionAnchorY = mmY + direction.anchorY;
+
+      ctx.save();
+      // Rotate around the bottom-centre anchor, which is the exact map-pin tip.
+      ctx.translate(directionAnchorX, directionAnchorY);
+      ctx.rotate(direction.angleRadians);
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(
+        directionImg,
+        -direction.width / 2,
+        -direction.height,
+        direction.width,
+        direction.height
+      );
+      ctx.restore();
+    } catch (error) {
+      console.warn('Failed to load local direction pin', error);
+    }
+
+    // Replace Google's default marker with the local custom pin.
+    try {
+      const pinImg = await loadMapPin();
+      const pin = calculatePinLayout(
+        miniMapWidth,
+        miniMapHeight,
+        scale,
+        pinImg.naturalWidth,
+        pinImg.naturalHeight
+      );
+      ctx.drawImage(pinImg, mmX + pin.x, mmY + pin.y, pin.width, pin.height);
+    } catch (error) {
+      console.warn('Failed to load local map pin', error);
+    }
+
     // Custom Google Logo
     ctx.save();
     const logoFontSize = Math.round(30 * scale);
@@ -499,7 +599,7 @@ function loadStaticMap(lat: number, lng: number, width: number, height: number, 
 
     const pixelW = Math.max(Math.round(width / scale), 100);
     const pixelH = Math.max(Math.round(height / scale), 100);
-    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelW}x${pixelH}&scale=2&maptype=${mapType}&markers=${lat},${lng}&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${pixelW}x${pixelH}&scale=2&maptype=${mapType}&key=${apiKey}`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -507,6 +607,45 @@ function loadStaticMap(lat: number, lng: number, width: number, height: number, 
     img.onerror = reject;
     img.src = url;
   });
+}
+
+const MAP_PIN_SRC = '/google_map_pin.png';
+const DIRECTION_PIN_SRC = '/pin_with_direction.png';
+let mapPinPromise: Promise<HTMLImageElement> | null = null;
+let directionPinPromise: Promise<HTMLImageElement> | null = null;
+
+/** Load the local pin marker once and reuse it for every render. */
+function loadMapPin(): Promise<HTMLImageElement> {
+  if (!mapPinPromise) {
+    mapPinPromise = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        mapPinPromise = null;
+        reject(new Error(`Gagal memuat pin peta: ${MAP_PIN_SRC}`));
+      };
+      img.src = MAP_PIN_SRC;
+    });
+  }
+  return mapPinPromise;
+}
+
+/** Load the direction / heading overlay once and reuse it for every render. */
+function loadDirectionPin(): Promise<HTMLImageElement> {
+  if (!directionPinPromise) {
+    directionPinPromise = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        directionPinPromise = null;
+        reject(new Error(`Gagal memuat ikon arah: ${DIRECTION_PIN_SRC}`));
+      };
+      img.src = DIRECTION_PIN_SRC;
+    });
+  }
+  return directionPinPromise;
 }
 
 function loadBadgeIcon(): Promise<HTMLImageElement> {
