@@ -110,7 +110,7 @@ export function calculatePinLayout(
   imageHeight: number
 ): { x: number; y: number; width: number; height: number } {
   const aspect = imageHeight > 0 ? imageWidth / imageHeight : 1;
-  const height = Math.min(miniMapHeight * 0.32, 96 * scale);
+  const height = Math.min(miniMapHeight * 0.20, 96 * scale);
   const width = height * aspect;
   return {
     x: miniMapWidth / 2 - width / 2,
@@ -251,7 +251,7 @@ async function drawOverlay(
     : Math.round(10 * scale);
 
   wmBadgeW = iconSize + iconPadding + ctx.measureText(wmText).width + wmBadgePadH * 2;
-  wmBadgeH = Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2;
+  wmBadgeH = Math.round(Math.max(fontSizeWatermark, iconSize) + wmBadgePadV * 2);
 
   const miniMapHeight = infoBoxHeight;
   const miniMapWidth = infoBoxHeight * 1.06;
@@ -328,8 +328,8 @@ async function drawOverlay(
   // Badge sits ABOVE the info box, top-right
   const badgeGap = 0;
   const badgeX = overlayLeft + miniMapWidth + gap + infoBoxWidth - wmBadgeW;
-  const badgeY = overlayBottom - infoBoxHeight - badgeGap - wmBadgeH;
-
+  const infoBoxY = Math.round(overlayBottom - infoBoxHeight);
+  const badgeY = Math.round(infoBoxY - wmBadgeH);
   const opacity = proSettings.overlayOpacity / 100;
 
   // Draw badge (separate small dark box above info box)
@@ -358,7 +358,6 @@ async function drawOverlay(
 
   // Info Box
   const infoBoxX = overlayLeft + miniMapWidth + gap;
-  const infoBoxY = overlayBottom - infoBoxHeight;
 
   // Use base color only, alpha is handled by globalAlpha
   ctx.fillStyle = `rgba(50, 50, 50, ${opacity})`;
@@ -438,32 +437,38 @@ async function drawOverlay(
       console.warn('Failed to load local map pin', error);
     }
 
+    // Load Google Logo
+    function loadGoogleLogo(): Promise<HTMLImageElement> {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = '/google_logo.png';
+      });
+    }
+
+
     // Custom Google Logo
     ctx.save();
-    const logoFontSize = Math.round(30 * scale);
-    ctx.font = `500 ${logoFontSize}px "Roboto", sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-
-    const logoX = mmX + 8 * scale;
-    const logoY = mmY + miniMapHeight - 6 * scale;
-
     if (proSettings.mapType === 'satellite') {
-      // Satellite: White text with shadow and black outline
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 4 * scale;
-
-      ctx.lineWidth = 3 * scale;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.lineJoin = 'round';
-      ctx.strokeText('Google', logoX, logoY);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('Google', logoX, logoY);
+      try {
+        const logoImg = await loadGoogleLogo();
+        const logoH = Math.round(miniMapHeight * 0.30);
+        const logoW = logoH * (logoImg.naturalWidth / logoImg.naturalHeight);
+        const logoX = mmX + 20 * scale;
+        const logoY = mmY + miniMapHeight - 20 * scale - logoH;
+        ctx.drawImage(logoImg, logoX, logoY, logoW, logoH);
+      } catch (e) {
+        console.warn('Failed to load Google logo', e);
+      }
     } else {
       // Roadmap: Multi-colored Google logo
       const colors = ['#4285F4', '#EA4335', '#FBBC05', '#4285F4', '#34A853', '#EA4335'];
       const text = "Google";
+      const logoH = Math.round(85 * scale);
+      const logoX = mmX + 20 * scale;
+      const logoY = mmY + miniMapHeight - 20 * scale - logoH;
       let currentX = logoX;
 
       // Add a subtle white outline for better contrast
